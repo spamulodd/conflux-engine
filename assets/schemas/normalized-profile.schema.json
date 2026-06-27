@@ -1,0 +1,342 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://conflux-engine.dev/schemas/normalized-profile/v1",
+  "title": "ConfluxSubscription",
+  "description": "Normalized subscription profile produced by conflux-engine fetch, parse, and normalize pipeline.",
+  "type": "object",
+  "required": ["title", "nodes"],
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Display name from Profile-Title header or provider default.",
+      "minLength": 1
+    },
+    "source_url": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "Original subscription URL, if fetched remotely.",
+      "examples": ["https://example.com/sub/token"]
+    },
+    "update_interval_hours": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Suggested refresh interval from Profile-Update-Interval header.",
+      "default": 0
+    },
+    "support_url": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "Provider support URL from Support-Url header."
+    },
+    "announce": {
+      "type": ["string", "null"],
+      "description": "Provider announcement banner from Announce header."
+    },
+    "user_info": {
+      "oneOf": [
+        { "$ref": "#/$defs/SubscriptionUserInfo" },
+        { "type": "null" }
+      ]
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Normalized proxy nodes extracted from the subscription.",
+      "items": { "$ref": "#/$defs/ConfluxNode" }
+    },
+    "extras": {
+      "$ref": "#/$defs/SubscriptionExtras"
+    }
+  },
+  "$defs": {
+    "SubscriptionUserInfo": {
+      "type": "object",
+      "description": "Traffic quota from Subscription-Userinfo header.",
+      "required": ["upload_bytes", "download_bytes", "total_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "upload_bytes": {
+          "type": "integer",
+          "description": "Bytes uploaded."
+        },
+        "download_bytes": {
+          "type": "integer",
+          "description": "Bytes downloaded."
+        },
+        "total_bytes": {
+          "type": "integer",
+          "description": "Total quota; 0 means unlimited."
+        },
+        "expire_unix": {
+          "type": ["integer", "null"],
+          "description": "Subscription expiry as Unix timestamp (seconds)."
+        },
+        "refill_unix": {
+          "type": ["integer", "null"],
+          "description": "Traffic reset date as Unix timestamp (seconds)."
+        }
+      }
+    },
+    "ConfluxNode": {
+      "type": "object",
+      "description": "A single normalized proxy node.",
+      "required": ["id", "tag", "protocol", "server", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable node identifier derived from connection fingerprint.",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "description": "Display name (decoded URI fragment or Clash proxy name)."
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        },
+        "server": {
+          "type": "string",
+          "description": "Hostname or IP address."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "ports": {
+          "type": ["array", "null"],
+          "description": "Port ranges for protocols that support multi-port (e.g. Hysteria2 mport).",
+          "items": { "type": "string" }
+        },
+        "credentials": {
+          "$ref": "#/$defs/Credentials"
+        },
+        "transport": {
+          "$ref": "#/$defs/Transport"
+        },
+        "tls": {
+          "oneOf": [
+            { "$ref": "#/$defs/TlsConfig" },
+            { "type": "null" }
+          ]
+        },
+        "reality": {
+          "oneOf": [
+            { "$ref": "#/$defs/RealityConfig" },
+            { "type": "null" }
+          ]
+        },
+        "flow": {
+          "type": ["string", "null"],
+          "description": "XTLS flow (e.g. xtls-rprx-vision)."
+        },
+        "encryption": {
+          "type": ["string", "null"],
+          "description": "VLESS encryption mode."
+        },
+        "packet_encoding": {
+          "type": ["string", "null"],
+          "description": "Packet encoding (e.g. xudp)."
+        },
+        "method": {
+          "type": ["string", "null"],
+          "description": "Shadowsocks cipher method."
+        },
+        "obfs": {
+          "oneOf": [
+            { "$ref": "#/$defs/ObfsConfig" },
+            { "type": "null" }
+          ]
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "source": {
+          "$ref": "#/$defs/NodeSource"
+        }
+      }
+    },
+    "Protocol": {
+      "type": "string",
+      "description": "Proxy protocol type.",
+      "enum": [
+        "vless",
+        "vmess",
+        "shadowsocks",
+        "trojan",
+        "hysteria2",
+        "tuic",
+        "wireguard",
+        "socks",
+        "http",
+        "unknown"
+      ]
+    },
+    "Credentials": {
+      "type": "object",
+      "description": "Authentication material (redacted in IPC responses).",
+      "additionalProperties": false,
+      "properties": {
+        "uuid": {
+          "type": "string",
+          "description": "VLESS/VMess UUID."
+        },
+        "password": {
+          "type": "string",
+          "description": "Trojan/Hysteria2/Shadowsocks password."
+        },
+        "method": {
+          "type": "string",
+          "description": "Shadowsocks encryption method."
+        },
+        "private_key": {
+          "type": "string",
+          "description": "WireGuard private key."
+        },
+        "public_key": {
+          "type": "string",
+          "description": "WireGuard public key."
+        },
+        "pre_shared_key": {
+          "type": "string",
+          "description": "WireGuard pre-shared key."
+        }
+      }
+    },
+    "Transport": {
+      "type": "object",
+      "description": "Connection transport layer.",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["tcp", "ws", "grpc", "http", "httpupgrade", "quic", "none"],
+          "default": "tcp"
+        },
+        "path": {
+          "type": "string",
+          "description": "WebSocket or HTTP path."
+        },
+        "host": {
+          "type": "string",
+          "description": "Host header override."
+        },
+        "service_name": {
+          "type": "string",
+          "description": "gRPC service name."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Custom HTTP headers."
+        }
+      }
+    },
+    "TlsConfig": {
+      "type": "object",
+      "description": "TLS settings.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "sni": { "type": "string", "description": "Server Name Indication." },
+        "alpn": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "fingerprint": {
+          "type": "string",
+          "description": "TLS client fingerprint (e.g. chrome)."
+        },
+        "insecure": {
+          "type": "boolean",
+          "description": "Skip certificate verification.",
+          "default": false
+        }
+      }
+    },
+    "RealityConfig": {
+      "type": "object",
+      "description": "REALITY protocol settings.",
+      "required": ["public_key", "short_id"],
+      "additionalProperties": false,
+      "properties": {
+        "public_key": { "type": "string" },
+        "short_id": { "type": "string" }
+      }
+    },
+    "ObfsConfig": {
+      "type": "object",
+      "description": "Obfuscation settings (e.g. Hysteria2 salamander).",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "password": { "type": "string" }
+      }
+    },
+    "NodeMeta": {
+      "type": "object",
+      "description": "Non-connection display metadata.",
+      "additionalProperties": false,
+      "properties": {
+        "country_code": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code."
+        },
+        "flag": {
+          "type": "string",
+          "description": "Display flag emoji."
+        },
+        "server_description": {
+          "type": "string"
+        },
+        "group_hint": {
+          "type": "string",
+          "description": "Inferred group from node name patterns."
+        }
+      }
+    },
+    "NodeSource": {
+      "type": "object",
+      "description": "Provenance of the parsed node.",
+      "additionalProperties": false,
+      "properties": {
+        "subscription_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "line_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parser": {
+          "type": "string",
+          "description": "Parser that produced this node (e.g. uri-vless, clash-yaml)."
+        },
+        "raw_uri": {
+          "type": "string",
+          "description": "Original URI line (omit in IPC responses)."
+        }
+      }
+    },
+    "SubscriptionExtras": {
+      "type": "object",
+      "description": "Passthrough metadata not mapped to nodes.",
+      "additionalProperties": true,
+      "properties": {
+        "clash_groups": {
+          "type": "array",
+          "description": "Raw Clash proxy-groups (v0.2+)."
+        },
+        "clash_rules": {
+          "type": "array",
+          "description": "Raw Clash rules (v0.2+)."
+        },
+        "happ_routing": {
+          "type": "object",
+          "description": "Happ routing profile passthrough."
+        }
+      }
+    }
+  }
+}

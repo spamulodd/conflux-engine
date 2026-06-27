@@ -1,0 +1,66 @@
+---
+source: crates/conflux-backend/src/singbox/config.rs
+expression: redacted
+---
+{
+  "dns": {
+    "servers": [
+      {
+        "address": "1.1.1.1",
+        "tag": "dns-direct"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "auto_route": true,
+      "inet4_address": "172.19.0.1/30",
+      "interface_name": "conflux-tun",
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    }
+  ],
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "password": "<REDACTED_PASSWORD>",
+      "server": "<REDACTED_SERVER>",
+      "server_port": 443,
+      "tag": "proxy",
+      "tls": {
+        "enabled": true,
+        "server_name": "<REDACTED_HOST>"
+      },
+      "transport": {
+        "host": "<REDACTED_HOST>",
+        "path": "/trojan",
+        "type": "ws"
+      },
+      "type": "trojan"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "dns-out",
+      "type": "dns"
+    }
+  ],
+  "route": {
+    "final": "proxy",
+    "rules": [
+      {
+        "outbound": "dns-out",
+        "protocol": "dns"
+      },
+      {
+        "inbound": "tun-in",
+        "outbound": "proxy"
+      }
+    ]
+  }
+}

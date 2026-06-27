@@ -1,0 +1,20 @@
+[package]
+name = "conflux-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Command-line interface for conflux-engine"
+
+[[bin]]
+name = "conflux"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+conflux-core = { path = "../conflux-core" }
+conflux-daemon = { path = "../conflux-daemon" }
+conflux-protocol = { path = "../conflux-protocol" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

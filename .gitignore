@@ -1,0 +1,37 @@
+# Rust build artifacts
+/target/
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Debug and local config
+*.pdb
+.env
+.env.local
+config.local.toml
+
+# Test fixtures with secrets (never commit live tokens)
+/tests/fixtures/live/
+*.secret
+
+# sing-box runtime artifacts
+*.singbox.json.tmp
+/sing-box/
+
+# Coverage and profiling
+/coverage/
+*.profraw
+/criterion/
+
+# Note: Cargo.lock is intentionally NOT ignored.
+# This workspace ships binary crates (conflux, confluxd); the lockfile
+# is committed to ensure reproducible release builds.

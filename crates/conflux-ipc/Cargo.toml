@@ -1,0 +1,16 @@
+[package]
+name = "conflux-ipc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "JSON line IPC over Windows named pipes for conflux-engine"
+
+[dependencies]
+conflux-core = { path = "../conflux-core" }
+conflux-protocol = { path = "../conflux-protocol" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

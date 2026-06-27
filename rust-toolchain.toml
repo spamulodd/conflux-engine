@@ -1,0 +1,6 @@
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+# Minimum supported Rust version (MSRV)
+# LazyLock and current dependency versions require Rust 1.80+
+min-version = "1.80.0"

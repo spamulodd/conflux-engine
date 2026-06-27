@@ -1,0 +1,26 @@
+[package]
+name = "conflux-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Long-running conflux-engine daemon with IPC"
+
+[lib]
+name = "conflux_daemon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "confluxd"
+path = "src/main.rs"
+
+[dependencies]
+conflux-core = { path = "../conflux-core" }
+conflux-ipc = { path = "../conflux-ipc" }
+conflux-protocol = { path = "../conflux-protocol" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
