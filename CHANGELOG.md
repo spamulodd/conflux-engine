@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - CI: remove unused `UnixStream` import on non-Windows IPC server
-- CI: bump MSRV to Rust 1.82 for current `idna_adapter` dependency tree
+- CI: bump MSRV to Rust 1.85 for current dependency tree
 - IPC: `FETCH` returns summary; `GET_PROFILE` redacts credentials and raw URIs
 - IPC: `PING` includes protocol version and engine semver
 - Docs: align IPC protocol, README, and config example with v0.1 implementation
