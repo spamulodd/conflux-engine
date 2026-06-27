@@ -16,7 +16,7 @@ Universal subscription fetch, parse, and normalize engine for proxy and VPN clie
 
 ### Prerequisites
 
-- Rust **1.85+** (see `rust-toolchain.toml`)
+- Rust **1.86+** (see `rust-toolchain.toml`)
 - Optional: [sing-box](https://sing-box.sagernet.org/) binary for backend library tests (see [docs/backend-singbox.md](docs/backend-singbox.md))
 
 ### Install from source

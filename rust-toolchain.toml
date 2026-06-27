@@ -2,5 +2,5 @@
 channel = "stable"
 components = ["rustfmt", "clippy"]
 # Minimum supported Rust version (MSRV)
-# Current transitive deps (zeroize 1.9+, idna_adapter 1.2+) require Rust 1.85+
-min-version = "1.85.0"
+# Current transitive deps (icu 2.2+, idna_adapter 1.2+) require Rust 1.86+
+min-version = "1.86.0"

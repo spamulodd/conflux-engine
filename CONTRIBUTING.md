@@ -6,7 +6,7 @@ Thank you for your interest in contributing. This project welcomes bug fixes, do
 
 ### Prerequisites
 
-- Rust **1.85+** (see `rust-toolchain.toml`)
+- Rust **1.86+** (see `rust-toolchain.toml`)
 - `cargo fmt`, `cargo clippy`, `cargo test`
 - Optional: sing-box binary for backend integration tests
 
