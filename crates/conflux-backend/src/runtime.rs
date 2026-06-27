@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use conflux_protocol::ConfluxSubscription;
 use serde_json::Value;
@@ -120,12 +120,12 @@ impl SingboxBackend {
 
     fn write_config(&self, config: &Value) -> Result<PathBuf, BackendError> {
         let dir = std::env::temp_dir().join("conflux-backend");
-        fs::create_dir_all(&dir).map_err(BackendError::Io)?;
+        ensure_secret_dir(&dir)?;
 
         let path = dir.join(format!("singbox-{}.json", std::process::id()));
         let body = serde_json::to_vec_pretty(config)
             .map_err(|err| BackendError::Config(err.to_string()))?;
-        fs::write(&path, body).map_err(BackendError::Io)?;
+        write_secret_file(&path, &body)?;
         Ok(path)
     }
 
@@ -259,6 +259,26 @@ impl Backend for SingboxBackend {
     }
 }
 
+fn ensure_secret_dir(dir: &Path) -> Result<(), BackendError> {
+    fs::create_dir_all(dir).map_err(BackendError::Io)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).map_err(BackendError::Io)?;
+    }
+    Ok(())
+}
+
+fn write_secret_file(path: &Path, body: &[u8]) -> Result<(), BackendError> {
+    fs::write(path, body).map_err(BackendError::Io)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(BackendError::Io)?;
+    }
+    Ok(())
+}
+
 fn is_valid_transition(from: BackendState, to: BackendState) -> bool {
     matches!(
         (from, to),
@@ -279,6 +299,39 @@ fn is_valid_transition(from: BackendState, to: BackendState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn secret_files_are_not_world_readable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "conflux-backend-perm-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+
+        ensure_secret_dir(&dir).expect("create secret dir");
+        let path = dir.join("singbox-test.json");
+        write_secret_file(&path, br#"{"password":"secret"}"#).expect("write secret file");
+
+        let mode = fs::metadata(&path)
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "config must be owner-read/write only");
+
+        let dir_mode = fs::metadata(&dir)
+            .expect("dir metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(dir_mode, 0o700, "config dir must be owner-only");
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir(&dir);
+    }
 
     #[test]
     fn state_transitions_are_restricted() {
