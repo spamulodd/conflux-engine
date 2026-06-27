@@ -48,3 +48,35 @@ pub struct ConfluxSubscription {
     pub nodes: Vec<ConfluxNode>,
     pub extras: SubscriptionExtras,
 }
+
+impl ConfluxSubscription {
+    /// Summary returned by IPC `FETCH` (no node list, no credentials).
+    pub fn fetch_summary(&self) -> serde_json::Value {
+        serde_json::json!({
+            "title": self.title,
+            "node_count": self.nodes.len(),
+            "update_interval_hours": self.update_interval_hours,
+            "user_info": self.user_info,
+            "support_url": self.support_url,
+            "announce": self.announce,
+        })
+    }
+
+    /// Profile safe for IPC transport: credentials and raw URIs are redacted.
+    pub fn redacted_for_ipc(&self) -> Self {
+        Self {
+            title: self.title.clone(),
+            source_url: self.source_url.clone(),
+            update_interval_hours: self.update_interval_hours,
+            user_info: self.user_info.clone(),
+            support_url: self.support_url.clone(),
+            announce: self.announce.clone(),
+            nodes: self
+                .nodes
+                .iter()
+                .map(ConfluxNode::redacted_for_ipc)
+                .collect(),
+            extras: self.extras.clone(),
+        }
+    }
+}

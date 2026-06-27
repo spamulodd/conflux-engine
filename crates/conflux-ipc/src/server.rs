@@ -118,7 +118,7 @@ impl IpcServer {
 
     #[cfg(not(windows))]
     async fn run_unix(&self) -> Result<(), ProtocolError> {
-        use tokio::net::{UnixListener, UnixStream};
+        use tokio::net::UnixListener;
 
         let _ = std::fs::remove_file(&self.endpoint);
         let listener = UnixListener::bind(&self.endpoint)
@@ -178,10 +178,14 @@ async fn handle_request(request: Request, state: &EngineState) -> Response {
     debug!(?request.cmd, "IPC request");
 
     match request.cmd {
-        RequestCommand::Ping => Response::ok(json!({ "pong": true })),
+        RequestCommand::Ping => Response::ok(json!({
+            "pong": true,
+            "version": PROTOCOL_VERSION,
+            "engine": env!("CARGO_PKG_VERSION"),
+        })),
         RequestCommand::Status => Response::ok(state.status_json().await),
         RequestCommand::GetProfile => match state.profile.read().await.clone() {
-            Some(profile) => match serde_json::to_value(profile) {
+            Some(profile) => match serde_json::to_value(profile.redacted_for_ipc()) {
                 Ok(value) => Response::ok(value),
                 Err(err) => Response::err(format!("failed to serialize profile: {err}")),
             },
@@ -193,13 +197,9 @@ async fn handle_request(request: Request, state: &EngineState) -> Response {
                 Ok(profile) => {
                     *state.last_fetch_url.write().await = Some(url);
                     *state.last_error.write().await = None;
-                    match serde_json::to_value(&profile) {
-                        Ok(value) => {
-                            *state.profile.write().await = Some(profile);
-                            Response::ok(value)
-                        }
-                        Err(err) => Response::err(format!("failed to serialize profile: {err}")),
-                    }
+                    let summary = profile.fetch_summary();
+                    *state.profile.write().await = Some(profile);
+                    Response::ok(summary)
                 }
                 Err(err) => {
                     let message = err.to_string();

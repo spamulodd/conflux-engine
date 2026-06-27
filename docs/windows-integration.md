@@ -65,11 +65,12 @@ async Task<string> SendCommandAsync(string request)
 }
 
 // Usage:
-var response = await SendCommandAsync("PING");
-// → OK {"pong":true,"version":1,"engine":"0.1.0"}
+var response = await SendCommandAsync("{\"v\":1,\"cmd\":\"PING\"}");
+// → {"v":1,"status":"OK","data":{"pong":true,"version":1,"engine":"0.1.0"}}
 
 var response = await SendCommandAsync(
-    "FETCH {\"url\":\"https://example.com/sub/token\"}");
+    "{\"v\":1,\"cmd\":\"FETCH\",\"url\":\"https://example.com/sub/token\"}");
+// → {"v":1,"status":"OK","data":{"title":"...","node_count":42,...}}
 ```
 
 ## Process Management

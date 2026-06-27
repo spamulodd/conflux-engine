@@ -2,5 +2,5 @@
 channel = "stable"
 components = ["rustfmt", "clippy"]
 # Minimum supported Rust version (MSRV)
-# LazyLock and current dependency versions require Rust 1.80+
-min-version = "1.80.0"
+# Current transitive deps (idna_adapter 1.2+) require Rust 1.82+
+min-version = "1.82.0"

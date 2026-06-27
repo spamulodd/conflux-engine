@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- CI: remove unused `UnixStream` import on non-Windows IPC server
+- CI: bump MSRV to Rust 1.82 for current `idna_adapter` dependency tree
+- IPC: `FETCH` returns summary; `GET_PROFILE` redacts credentials and raw URIs
+- IPC: `PING` includes protocol version and engine semver
+- Docs: align IPC protocol, README, and config example with v0.1 implementation
+
 ## [0.1.0] - 2026-06-27
 
 ### Added
@@ -28,5 +36,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Example: `examples/basic-fetch`
 - Apache-2.0 license
 
-[Unreleased]: https://github.com/your-org/conflux-engine/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-org/conflux-engine/releases/tag/v0.1.0
+[Unreleased]: https://github.com/spamulodd/conflux-engine/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/spamulodd/conflux-engine/releases/tag/v0.1.0

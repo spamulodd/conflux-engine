@@ -31,7 +31,12 @@ impl IpcClient {
 
     pub async fn fetch(&self, url: &str) -> Result<ConfluxSubscription, ProtocolError> {
         let response = self.send(&Request::fetch(url)).await?;
-        response_into_profile(response)
+        match response.status {
+            ResponseStatus::Ok => self.get_profile().await,
+            ResponseStatus::Err => Err(ProtocolError::Transport(
+                response.msg.unwrap_or_else(|| "unknown IPC error".into()),
+            )),
+        }
     }
 
     pub async fn get_profile(&self) -> Result<ConfluxSubscription, ProtocolError> {

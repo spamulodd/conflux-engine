@@ -6,14 +6,14 @@ Thank you for your interest in contributing. This project welcomes bug fixes, do
 
 ### Prerequisites
 
-- Rust **1.80+** (see `rust-toolchain.toml`)
+- Rust **1.82+** (see `rust-toolchain.toml`)
 - `cargo fmt`, `cargo clippy`, `cargo test`
 - Optional: sing-box binary for backend integration tests
 
 ### Setup
 
 ```bash
-git clone https://github.com/your-org/conflux-engine.git
+git clone https://github.com/spamulodd/conflux-engine.git
 cd conflux-engine
 cargo build --workspace
 cargo test --workspace

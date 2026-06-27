@@ -1,50 +1,55 @@
 # IPC Protocol
 
-Conflux-engine exposes a **JSON-over-line** control protocol over a Windows named pipe. Desktop VPN clients send one request per connection; the daemon responds with a single line and closes the connection.
+Conflux-engine exposes a **JSON-over-line** control protocol over a Windows named pipe (Unix domain socket on Linux/macOS for CI). Each connection carries one request line and one response line.
 
 ## Transport
 
 | Property | Value |
 |----------|-------|
-| Platform | Windows (primary); Unix domain socket stub for CI |
-| Pipe name | `\\.\pipe\conflux-engine` (configurable) |
+| Platform | Windows named pipe; Unix socket at `/tmp/conflux-engine.sock` on non-Windows |
+| Pipe name | `\\.\pipe\conflux-engine` (configurable via `pipe_name` in daemon config) |
 | Encoding | UTF-8 |
-| Framing | One JSON payload per line, terminated by `\n` (LF) |
-| Connection model | One request → one response → disconnect |
-| Protocol version | `1` |
-
-### Pipe ACL
-
-The daemon creates the pipe with read/write access for authenticated users so a standard-user desktop client can communicate with an elevated daemon host, mirroring common VPN service patterns.
+| Framing | One JSON object per line, terminated by `\n` (LF) |
+| Connection model | Client may send multiple requests on one connection (line-delimited) |
+| Protocol version | `1` (`v` field in every message) |
 
 ## Message Format
 
-### Request
+### Request envelope
 
+```json
+{"v":1,"cmd":"PING"}
+{"v":1,"cmd":"FETCH","url":"https://example.com/sub/token"}
+{"v":1,"cmd":"GET_PROFILE"}
+{"v":1,"cmd":"STATUS"}
 ```
-{VERB} [{json_payload}]\n
-```
 
-- `VERB` — uppercase ASCII command name
-- `json_payload` — optional JSON object; omitted for parameterless commands
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `v` | integer | yes | Protocol version (`1`) |
+| `cmd` | string | yes | `PING`, `FETCH`, `GET_PROFILE`, or `STATUS` |
+| `url` | string | for `FETCH` | HTTPS subscription URL |
 
-### Response
+### Response envelope
 
 Success:
 
-```
-OK {json_payload}\n
+```json
+{"v":1,"status":"OK","data":{...}}
 ```
 
 Failure:
 
-```
-ERR {message}\n
+```json
+{"v":1,"status":"ERR","msg":"human-readable error"}
 ```
 
-- `message` — human-readable error string (no nested JSON in v0.1)
-
-Unknown commands return `ERR unknown command: {VERB}`.
+| Field | Type | Description |
+|-------|------|-------------|
+| `v` | integer | Protocol version |
+| `status` | string | `OK` or `ERR` |
+| `data` | object | Present on success |
+| `msg` | string | Present on failure |
 
 ## Protocol Version 1 Commands
 
@@ -52,44 +57,30 @@ Unknown commands return `ERR unknown command: {VERB}`.
 
 Health check and version negotiation.
 
-**Request:**
+**Request:** `{"v":1,"cmd":"PING"}`
 
-```
-PING
-```
-
-**Response:**
+**Response `data`:**
 
 ```json
-OK {"pong": true, "version": 1, "engine": "0.1.0"}
+{
+  "pong": true,
+  "version": 1,
+  "engine": "0.1.0"
+}
 ```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `pong` | boolean | Always `true` on success |
-| `version` | integer | IPC protocol version |
-| `engine` | string | conflux-engine semver |
 
 ---
 
 ### FETCH
 
-Download and parse a subscription URL. Updates the daemon's in-memory profile cache.
+Download and parse a subscription URL. Updates the daemon in-memory profile cache.
 
-**Request:**
+**Request:** `{"v":1,"cmd":"FETCH","url":"https://example.com/sub/token"}`
 
-```
-FETCH {"url": "https://example.com/sub/token"}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `url` | string | yes | HTTPS subscription URL |
-
-**Response:**
+**Response `data` (summary only — no nodes or credentials):**
 
 ```json
-OK {
+{
   "title": "Example VPN",
   "node_count": 42,
   "update_interval_hours": 12,
@@ -98,172 +89,106 @@ OK {
     "download_bytes": 1073741824,
     "total_bytes": 0,
     "expire_unix": 1785099047
-  }
+  },
+  "support_url": "https://example.com/support",
+  "announce": "Welcome"
 }
 ```
 
-On failure:
+On failure: `{"v":1,"status":"ERR","msg":"fetch failed: HTTP 401 Unauthorized"}`
 
-```
-ERR fetch failed: HTTP 401 Unauthorized
-```
-
-The full normalized profile is retrieved via `GET_PROFILE`.
+Use `GET_PROFILE` after a successful fetch to retrieve the cached profile (credentials redacted).
 
 ---
 
 ### GET_PROFILE
 
-Return the current normalized subscription profile from cache.
+Return the cached normalized profile.
 
-**Request:**
+**Request:** `{"v":1,"cmd":"GET_PROFILE"}`
 
-```
-GET_PROFILE
-```
+**Response `data`:** normalized profile JSON with `credentials`, raw URIs, and private keys replaced by `"[redacted]"`.
 
-**Response:**
-
-```json
-OK {
-  "title": "Example VPN",
-  "source_url": "https://example.com/sub/token",
-  "update_interval_hours": 12,
-  "support_url": "https://example.com/support",
-  "announce": "Welcome to Example VPN",
-  "user_info": {
-    "upload_bytes": 0,
-    "download_bytes": 1073741824,
-    "total_bytes": 0,
-    "expire_unix": 1785099047,
-    "refill_unix": null
-  },
-  "nodes": [
-    {
-      "id": "a1b2c3d4",
-      "tag": "Example Node #1",
-      "protocol": "vless",
-      "server": "203.0.113.10",
-      "port": 443,
-      "meta": {
-        "country_code": "FI",
-        "flag": "🇫🇮"
-      }
-    }
-  ]
-}
-```
-
-Node objects in IPC responses omit sensitive credential fields. Full credentials are available to the backend internally; clients receive display-safe summaries.
-
-If no profile is loaded:
-
-```
-ERR no profile loaded
-```
+If no profile is loaded: `{"v":1,"status":"ERR","msg":"no profile loaded"}`
 
 ---
 
 ### STATUS
 
-Return daemon and backend runtime status.
+Return daemon runtime status (v0.1 — no sing-box backend state yet).
 
-**Request:**
+**Request:** `{"v":1,"cmd":"STATUS"}`
 
-```
-STATUS
-```
-
-**Response:**
+**Response `data`:**
 
 ```json
-OK {
-  "daemon_state": "running",
-  "backend_state": "idle",
-  "profile_loaded": true,
-  "profile_title": "Example VPN",
+{
+  "version": "0.1.0",
+  "protocol_version": 1,
+  "uptime_secs": 3600,
+  "has_profile": true,
   "node_count": 42,
-  "selected_node_id": null,
-  "backend": {
-    "type": "singbox",
-    "state": "idle",
-    "uptime_seconds": 0,
-    "rx_bytes": 0,
-    "tx_bytes": 0,
-    "error": null
-  }
+  "title": "Example VPN",
+  "last_fetch_url": "https://example.com/sub/token",
+  "last_error": null
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `daemon_state` | string | `running`, `stopping`, `error` |
-| `backend_state` | string | `idle`, `starting`, `running`, `stopping`, `error` |
-| `profile_loaded` | boolean | Whether a profile is cached |
-| `selected_node_id` | string \| null | Currently selected node (v0.2+) |
-| `backend.rx_bytes` | integer | Received bytes (when running) |
-| `backend.tx_bytes` | integer | Transmitted bytes (when running) |
+Backend lifecycle fields (`backend_state`, `rx_bytes`, `tx_bytes`) arrive in v0.2 with `CONNECT` / `DISCONNECT`.
 
 ## Planned Commands (v0.2+)
 
 | Command | Purpose |
 |---------|---------|
-| `CONNECT` | Start backend with selected node and tunnel options |
+| `CONNECT` | Start sing-box backend with selected node |
 | `DISCONNECT` | Stop backend and tear down tunnel |
 | `SELECT_NODE` | Set active node without connecting |
-| `IMPORT_SUBSCRIPTION` | Parse inline body or URL with format hint |
-| `LIST_NODES` | Return node summaries (alias for profile subset) |
 | `RELOAD` | Hot-reload backend configuration |
-| `EVENTS` | Poll recent events (profile updated, state changed) |
+| `EVENTS` | Poll daemon/backend events |
 
 ## Wire Examples
 
 Successful ping:
 
 ```
-Client → PING\n
-Server → OK {"pong":true,"version":1,"engine":"0.1.0"}\n
+Client → {"v":1,"cmd":"PING"}\n
+Server → {"v":1,"status":"OK","data":{"pong":true,"version":1,"engine":"0.1.0"}}\n
 ```
 
 Fetch subscription:
 
 ```
-Client → FETCH {"url":"https://example.com/sub/token"}\n
-Server → OK {"title":"Example VPN","node_count":42,"update_interval_hours":12}\n
+Client → {"v":1,"cmd":"FETCH","url":"https://example.com/sub/token"}\n
+Server → {"v":1,"status":"OK","data":{"title":"Example VPN","node_count":42,"update_interval_hours":12}}\n
 ```
 
-Invalid command:
+Invalid JSON:
 
 ```
-Client → FOO\n
-Server → ERR unknown command: FOO\n
+Client → not json\n
+Server → {"v":1,"status":"ERR","msg":"invalid request JSON: ..."}\n
 ```
 
 ## Client Implementation Notes
 
-1. Open `NamedPipeClientStream` to `\\.\pipe\conflux-engine`
-2. Write request bytes including trailing `\n`
-3. Read until `\n` or connection close
-4. Parse response prefix (`OK` or `ERR`)
-5. Close the stream
+1. Open `NamedPipeClientStream` to `\\.\pipe\conflux-engine` (Windows) or connect to the Unix socket path.
+2. Write one JSON request per line (include trailing `\n`).
+3. Read one line JSON response.
+4. Check `status` (`OK` / `ERR`).
 
-Recommended polling interval for `STATUS`: 2 seconds while connected (matches common desktop client patterns).
+See [windows-integration.md](windows-integration.md) for a C# example.
 
 ### Timeouts
 
 | Operation | Suggested timeout |
 |-----------|-------------------|
 | `PING` | 5 s |
-| `FETCH` | 60 s (network-bound) |
+| `FETCH` | 60 s |
 | `GET_PROFILE` | 5 s |
 | `STATUS` | 5 s |
 
-## Schema Reference
-
-The `GET_PROFILE` response body conforms to [normalized-profile.schema.json](../assets/schemas/normalized-profile.schema.json) with credential fields redacted for IPC transport.
-
 ## Compatibility
 
-- Protocol version is negotiated via `PING`. Clients MUST check `version` and refuse incompatible versions.
-- Additive JSON fields in responses are forward-compatible; clients MUST ignore unknown fields.
-- Breaking changes increment the protocol version and use a new pipe name suffix if needed (e.g. `conflux-engine.v2`).
+- Clients MUST send `v: 1` and reject unsupported versions.
+- Unknown JSON fields in `data` are forward-compatible; ignore them.
+- Breaking changes increment the protocol version.

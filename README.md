@@ -1,23 +1,23 @@
 # conflux-engine
 
-Universal subscription fetch, parse, and normalize engine for proxy and VPN clients. Conflux-engine downloads provider subscriptions, detects their format, maps nodes to a canonical profile model, and can drive a [sing-box](https://sing-box.sagernet.org/) backend. It ships as a CLI, a long-running daemon, and a Windows IPC service for integration with desktop VPN clients.
+Universal subscription fetch, parse, and normalize engine for proxy and VPN clients. Conflux-engine downloads provider subscriptions, detects their format, maps nodes to a canonical profile model, and ships a [sing-box](https://sing-box.sagernet.org/) config generator for the data plane. It is designed for integration with desktop VPN clients via a JSON-line IPC daemon.
 
 ## Features
 
-- **HTTP subscription fetch** — TLS via rustls, standard subscription headers (`Profile-Title`, `Subscription-Userinfo`, `Profile-Update-Interval`, `Announce`, `Support-Url`), and conditional caching
-- **Multi-format parsing** — Base64 URI lists, plaintext URI lines, Clash YAML (`proxies[]`), and sing-box JSON outbounds
-- **Protocol coverage** — VLESS, VMess, Shadowsocks, Trojan, Hysteria2, TUIC, WireGuard, SOCKS, and provider-specific URI schemes
+- **HTTP subscription fetch** — TLS via rustls; parses standard subscription headers (`Profile-Title`, `Subscription-Userinfo`, `Profile-Update-Interval`, `Announce`, `Support-Url`)
+- **Multi-format parsing** — Base64 URI lists, plaintext URI lines, Clash YAML (`proxies[]`)
+- **Protocol coverage (v0.1)** — VLESS, VMess, Shadowsocks, Trojan, Hysteria2 (`hy2` alias), native `himera://` tunnel URIs
 - **Normalized profile model** — backend-agnostic `ConfluxSubscription` / `ConfluxNode` types with a published JSON Schema
-- **sing-box backend** — translate normalized profiles to sing-box config and supervise the data-plane process
-- **Windows IPC** — JSON line protocol over a named pipe for desktop VPN client integration
-- **CLI tools** — `conflux` for fetch/convert/validate; `confluxd` for daemon mode
+- **sing-box backend library** — translate normalized profiles to sing-box JSON and supervise a subprocess (used from Rust; daemon `CONNECT` in v0.2)
+- **Windows IPC** — JSON envelope protocol v1 over `\\.\pipe\conflux-engine` (Unix socket for CI/dev on Linux/macOS)
+- **CLI tools** — `conflux` for fetch/convert/validate; `confluxd` for IPC daemon mode
 
 ## Quick Start
 
 ### Prerequisites
 
-- Rust **1.80+** (see `rust-toolchain.toml`)
-- Optional: [sing-box](https://sing-box.sagernet.org/) binary for tunnel mode (see [docs/backend-singbox.md](docs/backend-singbox.md))
+- Rust **1.82+** (see `rust-toolchain.toml`)
+- Optional: [sing-box](https://sing-box.sagernet.org/) binary for backend library tests (see [docs/backend-singbox.md](docs/backend-singbox.md))
 
 ### Install from source
 
@@ -27,33 +27,15 @@ cd conflux-engine
 cargo build --release
 ```
 
-Binaries are produced at `target/release/conflux` and `target/release/confluxd`.
+Binaries: `target/release/conflux` and `target/release/confluxd`.
 
 ### CLI examples
 
-Fetch a subscription and write a normalized profile:
-
 ```bash
 conflux fetch https://example.com/sub/token --output profile.json
-```
-
-Convert a local subscription file:
-
-```bash
 conflux convert subscription.txt --format auto --output profile.json
-```
-
-Validate a normalized profile against the JSON Schema:
-
-```bash
 conflux validate profile.json
-```
-
-Run the IPC daemon (Windows):
-
-```bash
-confluxd
-# listens on \\.\pipe\conflux-engine
+confluxd   # IPC on \\.\pipe\conflux-engine (Windows)
 ```
 
 ### Library usage
@@ -64,7 +46,7 @@ use conflux_engine::fetch_and_normalize;
 let subscription = fetch_and_normalize("https://example.com/sub/token").await?;
 ```
 
-See [examples/basic-fetch/src/main.rs](examples/basic-fetch/src/main.rs) for a complete example.
+See [examples/basic-fetch/src/main.rs](examples/basic-fetch/src/main.rs).
 
 ## Architecture
 
@@ -96,88 +78,65 @@ See [examples/basic-fetch/src/main.rs](examples/basic-fetch/src/main.rs) for a c
 | `conflux-protocol` | Shared types: `ConfluxNode`, `ConfluxSubscription`, errors |
 | `conflux-core` | Fetch, parse, normalize pipeline |
 | `conflux-backend` | Backend trait; sing-box config generation and process management |
-| `conflux-ipc` | Windows named-pipe IPC server and client |
+| `conflux-ipc` | IPC server and client |
 | `conflux-cli` | `conflux` binary |
 | `conflux-daemon` | `confluxd` binary |
-| `conflux-engine` | Root library facade re-exporting core + protocol |
+| `conflux-engine` | Root library facade |
 
 Detailed design: [docs/architecture.md](docs/architecture.md)
 
 ## Supported Subscription Formats
 
-| Format | Detection | v0.1.0 status |
-|--------|-----------|---------------|
-| Base64-encoded URI list | Body is Base64; decoded lines contain `scheme://` | Supported |
-| Plaintext URI list | Lines with `vless://`, `ss://`, etc. | Supported |
-| VLESS URI | `vless://` prefix | Supported |
-| VMess URI | `vmess://` + Base64 JSON | Supported |
-| Shadowsocks URI | `ss://` (SIP002 and legacy) | Supported |
-| Trojan URI | `trojan://` | Supported |
-| Hysteria2 URI | `hysteria2://` or `hy2://` | Supported |
-| Clash / Mihomo YAML | Top-level `proxies:` key | Partial (`proxies[]` only) |
-| sing-box JSON | `"outbounds"` array | Partial (protocol outbounds) |
-| TUIC / WireGuard URI | `tuic://`, `wireguard://` | Planned |
-| Happ body directives | `#profile-title:` comment lines | Metadata overlay |
-| Xray JSON array | `"protocol"` field | Planned |
+| Format | v0.1.0 status |
+|--------|---------------|
+| Base64-encoded URI list | Supported |
+| Plaintext URI list | Supported |
+| VLESS / VMess / SS / Trojan / Hysteria2 URI | Supported |
+| Clash / Mihomo YAML (`proxies[]`) | Partial |
+| Happ `#profile-title:` body directives | Metadata overlay |
+| sing-box JSON / Xray JSON / TUIC / WireGuard URI | Planned |
 
-Full detection heuristics: [docs/subscription-formats.md](docs/subscription-formats.md)
-
-## sing-box Backend
-
-Conflux-engine does not embed a proxy core. It generates sing-box configuration from normalized profiles and supervises a sing-box subprocess for the data plane. This keeps subscription intelligence separate from traffic handling and allows independent sing-box upgrades.
-
-See [docs/backend-singbox.md](docs/backend-singbox.md) for configuration mapping, binary discovery, and version compatibility.
+Full heuristics: [docs/subscription-formats.md](docs/subscription-formats.md)
 
 ## Windows IPC Integration
 
-Desktop VPN clients integrate via a JSON-over-line protocol on the named pipe `\\.\pipe\conflux-engine`. The client sends one request per connection; the daemon responds with `OK {json}` or `ERR {message}`.
+Clients send JSON request envelopes; the daemon replies with `{"v":1,"status":"OK","data":{...}}` or `{"v":1,"status":"ERR","msg":"..."}`.
 
-Initial commands: `PING`, `FETCH`, `GET_PROFILE`, `STATUS`.
+| Command | v0.1 behavior |
+|---------|---------------|
+| `PING` | Health + protocol/engine version |
+| `FETCH` | Download subscription; returns summary (`node_count`, quota headers) |
+| `GET_PROFILE` | Cached profile with credentials redacted |
+| `STATUS` | Daemon uptime and cache state |
 
-See [docs/ipc-protocol.md](docs/ipc-protocol.md) and [docs/windows-integration.md](docs/windows-integration.md).
+`CONNECT` / `DISCONNECT` (drive sing-box from the daemon) are planned for **v0.2**.
+
+Protocol reference: [docs/ipc-protocol.md](docs/ipc-protocol.md) · C# notes: [docs/windows-integration.md](docs/windows-integration.md)
 
 ## Configuration
 
-Daemon configuration is loaded from the path in the `CONFLUX_CONFIG` environment variable, or a default location:
+Daemon config path: `CONFLUX_CONFIG` env var, else:
+
+- Windows: `%APPDATA%\conflux.toml`
+- Linux/macOS: `~/.config/conflux/conflux.toml`
 
 ```toml
-# config.toml
-[subscription]
-url = "https://example.com/sub/token"
-refresh_interval_hours = 12
-
-[backend]
-type = "singbox"
-binary = "C:\\Program Files\\sing-box\\sing-box.exe"
-
-[ipc]
+# subscription_url = "https://example.com/sub/token"
 pipe_name = "conflux-engine"
-
-[logging]
-level = "info"
 ```
+
+Example file: [conflux.toml.example](conflux.toml.example)
 
 ## Development
 
 ```bash
-# Format check
 cargo fmt --all -- --check
-
-# Lint
 cargo clippy --workspace --all-targets -- -D warnings
-
-# Test
 cargo test --workspace
-
-# Build release binaries
 cargo build --release -p conflux-cli -p conflux-daemon
 ```
 
-Workspace layout and module responsibilities are documented in [docs/architecture.md](docs/architecture.md).
-
-### JSON Schema
-
-The normalized profile schema lives at [assets/schemas/normalized-profile.schema.json](assets/schemas/normalized-profile.schema.json).
+JSON Schema: [assets/schemas/normalized-profile.schema.json](assets/schemas/normalized-profile.schema.json)
 
 ## Contributing
 
@@ -185,8 +144,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+See [SECURITY.md](SECURITY.md). IPC responses redact credentials; use the Rust library directly when full secrets are required locally.
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE).

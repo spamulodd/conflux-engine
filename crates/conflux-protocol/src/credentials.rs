@@ -25,3 +25,27 @@ pub enum Credentials {
     },
     None,
 }
+
+impl Credentials {
+    pub fn redacted_for_ipc(&self) -> Self {
+        match self {
+            Self::Password { .. } => Self::Password {
+                password: IPC_REDACTED.to_string(),
+            },
+            Self::Shadowsocks { method, .. } => Self::Shadowsocks {
+                method: method.clone(),
+                password: IPC_REDACTED.to_string(),
+            },
+            Self::KeyPair { .. } => Self::KeyPair {
+                private_key: IPC_REDACTED.to_string(),
+                public_key: None,
+            },
+            Self::NativeKey { .. } => Self::NativeKey {
+                key_hex: IPC_REDACTED.to_string(),
+            },
+            other => other.clone(),
+        }
+    }
+}
+
+const IPC_REDACTED: &str = "[redacted]";

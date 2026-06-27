@@ -38,8 +38,8 @@ jobs:
       - name: Check MSRV (ubuntu only)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          rustup toolchain install 1.80.0 --profile minimal
-          cargo +1.80.0 check --workspace
+          rustup toolchain install 1.82.0 --profile minimal
+          cargo +1.82.0 check --workspace --locked
 
       - name: Format check
         run: cargo fmt --all -- --check

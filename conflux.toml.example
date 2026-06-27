@@ -1,17 +1,11 @@
 # Example conflux daemon configuration.
-# Copy to %APPDATA%\conflux.toml or set CONFLUX_CONFIG.
+# Copy to %APPDATA%\conflux.toml (Windows) or ~/.config/conflux/conflux.toml (Linux/macOS),
+# or set CONFLUX_CONFIG to point at this file.
 
-# Optional default subscription (HTTPS only).
+# Optional default subscription (HTTPS only). v0.1: stored but not auto-refreshed.
 # subscription_url = "https://example.com/sub/token"
 
-# Named pipe for IPC (Windows).
+# Named pipe for IPC (Windows). On Unix the daemon uses /tmp/conflux-engine.sock instead.
 pipe_name = "conflux-engine"
 
-# Refresh interval in hours when subscription_url is set.
-refresh_interval_hours = 12
-
-# Path to sing-box binary (optional; also SINGBOX_PATH env).
-# singbox_path = "C:\\Program Files\\sing-box\\sing-box.exe"
-
-[logging]
-level = "info"
+# Planned for v0.2: refresh_interval_hours, singbox_path, [logging]

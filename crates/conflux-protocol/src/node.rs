@@ -57,3 +57,25 @@ pub struct ConfluxNode {
     /// Usage endpoint for native tunnel subscriptions.
     pub usage_url: Option<String>,
 }
+
+const IPC_REDACTED: &str = "[redacted]";
+
+impl ConfluxNode {
+    /// Node metadata safe for IPC transport (credentials and raw URI redacted).
+    pub fn redacted_for_ipc(&self) -> Self {
+        let mut node = self.clone();
+        node.credentials = node.credentials.redacted_for_ipc();
+        node.source.raw_uri = node
+            .source
+            .raw_uri
+            .as_ref()
+            .map(|_| IPC_REDACTED.to_string());
+        node.raw = match &node.raw {
+            RawPayload::Uri { .. } => RawPayload::Uri {
+                value: IPC_REDACTED.to_string(),
+            },
+            other => other.clone(),
+        };
+        node
+    }
+}
