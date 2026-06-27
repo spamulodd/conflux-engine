@@ -58,23 +58,35 @@ pub struct ConfluxNode {
     pub usage_url: Option<String>,
 }
 
-const IPC_REDACTED: &str = "[redacted]";
-
 impl ConfluxNode {
     /// Node metadata safe for IPC transport (credentials and raw URI redacted).
     pub fn redacted_for_ipc(&self) -> Self {
+        use crate::redact::{redact_optional_url, redact_sensitive_json, IPC_REDACTED};
+
         let mut node = self.clone();
         node.credentials = node.credentials.redacted_for_ipc();
-        node.source.raw_uri = node
-            .source
-            .raw_uri
-            .as_ref()
-            .map(|_| IPC_REDACTED.to_string());
+        node.source.subscription_url = redact_optional_url(&node.source.subscription_url);
+        node.source.raw_uri = redact_optional_url(&node.source.raw_uri);
+        node.usage_url = redact_optional_url(&node.usage_url);
+        node.obfs = node.obfs.as_ref().map(|obfs| crate::ObfsConfig {
+            kind: obfs.kind.clone(),
+            password: redact_optional_url(&obfs.password),
+        });
+        node.reality = node.reality.as_ref().map(|reality| crate::RealityConfig {
+            public_key: IPC_REDACTED.to_string(),
+            short_id: IPC_REDACTED.to_string(),
+            spider_x: reality.spider_x.clone(),
+        });
         node.raw = match &node.raw {
             RawPayload::Uri { .. } => RawPayload::Uri {
                 value: IPC_REDACTED.to_string(),
             },
-            other => other.clone(),
+            RawPayload::ClashProxy { value } => RawPayload::ClashProxy {
+                value: redact_sensitive_json(value),
+            },
+            RawPayload::Json { value } => RawPayload::Json {
+                value: redact_sensitive_json(value),
+            },
         };
         node
     }

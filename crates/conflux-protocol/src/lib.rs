@@ -4,6 +4,7 @@ mod credentials;
 mod error;
 mod node;
 mod protocol;
+mod redact;
 mod subscription;
 mod tls;
 mod transport;
@@ -17,3 +18,8 @@ pub use subscription::{
 };
 pub use tls::{RealityConfig, TlsConfig};
 pub use transport::{ObfsConfig, Transport, TransportKind};
+
+/// Redact subscription URLs before exposing them over IPC.
+pub fn redact_url_for_ipc(url: &Option<String>) -> Option<String> {
+    redact::redact_optional_url(url)
+}

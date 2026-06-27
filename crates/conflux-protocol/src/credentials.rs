@@ -28,7 +28,12 @@ pub enum Credentials {
 
 impl Credentials {
     pub fn redacted_for_ipc(&self) -> Self {
+        use crate::redact::IPC_REDACTED;
+
         match self {
+            Self::Uuid { .. } => Self::Uuid {
+                id: Uuid::nil(),
+            },
             Self::Password { .. } => Self::Password {
                 password: IPC_REDACTED.to_string(),
             },
@@ -43,9 +48,7 @@ impl Credentials {
             Self::NativeKey { .. } => Self::NativeKey {
                 key_hex: IPC_REDACTED.to_string(),
             },
-            other => other.clone(),
+            Self::None => Self::None,
         }
     }
 }
-
-const IPC_REDACTED: &str = "[redacted]";

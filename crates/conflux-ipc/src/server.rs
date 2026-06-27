@@ -38,6 +38,7 @@ impl EngineState {
 
     pub async fn status_json(&self) -> Value {
         let profile = self.profile.read().await;
+        let last_fetch_url = self.last_fetch_url.read().await.clone();
         json!({
             "version": env!("CARGO_PKG_VERSION"),
             "protocol_version": PROTOCOL_VERSION,
@@ -45,7 +46,7 @@ impl EngineState {
             "has_profile": profile.is_some(),
             "node_count": profile.as_ref().map(|p| p.nodes.len()).unwrap_or(0),
             "title": profile.as_ref().map(|p| p.title.clone()),
-            "last_fetch_url": self.last_fetch_url.read().await.clone(),
+            "last_fetch_url": conflux_protocol::redact_url_for_ipc(&last_fetch_url),
             "last_error": self.last_error.read().await.clone(),
         })
     }

@@ -64,9 +64,11 @@ impl ConfluxSubscription {
 
     /// Profile safe for IPC transport: credentials and raw URIs are redacted.
     pub fn redacted_for_ipc(&self) -> Self {
+        use crate::redact::{redact_optional_url, redact_sensitive_json};
+
         Self {
             title: self.title.clone(),
-            source_url: self.source_url.clone(),
+            source_url: redact_optional_url(&self.source_url),
             update_interval_hours: self.update_interval_hours,
             user_info: self.user_info.clone(),
             support_url: self.support_url.clone(),
@@ -76,7 +78,105 @@ impl ConfluxSubscription {
                 .iter()
                 .map(ConfluxNode::redacted_for_ipc)
                 .collect(),
-            extras: self.extras.clone(),
+            extras: SubscriptionExtras {
+                clash_proxy_groups: self
+                    .extras
+                    .clash_proxy_groups
+                    .as_ref()
+                    .map(redact_sensitive_json),
+                clash_rules: self.extras.clash_rules.as_ref().map(redact_sensitive_json),
+            },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        Credentials, NodeMeta, NodeSource, ObfsConfig, Protocol, RawPayload, Transport,
+        TransportKind,
+    };
+    use serde_json::json;
+    use uuid::Uuid;
+
+    fn sample_node() -> ConfluxNode {
+        ConfluxNode {
+            id: "test".into(),
+            tag: "test-node".into(),
+            protocol: Protocol::Vless,
+            source: NodeSource {
+                subscription_url: Some("https://example.com/sub/secret-token".into()),
+                raw_uri: Some("vless://uuid@host:443".into()),
+                line_index: Some(0),
+                parser: Some("uri".into()),
+            },
+            server: "example.com".into(),
+            port: 443,
+            ports: None,
+            credentials: Credentials::Uuid {
+                id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
+            },
+            transport: Transport {
+                kind: TransportKind::Tcp,
+                ..Default::default()
+            },
+            tls: None,
+            reality: None,
+            flow: None,
+            encryption: None,
+            packet_encoding: None,
+            method: None,
+            obfs: Some(ObfsConfig {
+                kind: "salamander".into(),
+                password: Some("obfs-secret".into()),
+            }),
+            meta: NodeMeta::default(),
+            raw: RawPayload::ClashProxy {
+                value: json!({
+                    "name": "test-node",
+                    "type": "trojan",
+                    "password": "clash-secret"
+                }),
+            },
+            native_profile: None,
+            native_tun_cidr: None,
+            usage_url: Some("https://example.com/usage/secret".into()),
+        }
+    }
+
+    #[test]
+    fn redacted_profile_strips_ipc_secrets() {
+        let profile = ConfluxSubscription {
+            title: "Test".into(),
+            source_url: Some("https://example.com/sub/secret-token".into()),
+            update_interval_hours: 24,
+            user_info: None,
+            support_url: None,
+            announce: None,
+            nodes: vec![sample_node()],
+            extras: SubscriptionExtras::default(),
+        };
+
+        let redacted = profile.redacted_for_ipc();
+        let node = &redacted.nodes[0];
+
+        assert_eq!(
+            redacted.source_url,
+            Some(crate::redact::IPC_REDACTED.to_string())
+        );
+        assert_eq!(node.credentials, Credentials::Uuid { id: Uuid::nil() });
+        assert_eq!(node.obfs.as_ref().unwrap().password.as_deref(), Some("[redacted]"));
+        assert_eq!(
+            node.raw,
+            RawPayload::ClashProxy {
+                value: json!({
+                    "name": "test-node",
+                    "type": "trojan",
+                    "password": "[redacted]"
+                })
+            }
+        );
+        assert_eq!(node.usage_url.as_deref(), Some("[redacted]"));
     }
 }
