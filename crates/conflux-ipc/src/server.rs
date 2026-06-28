@@ -4,20 +4,27 @@ use std::time::Instant;
 use conflux_core::{fetch_and_normalize, ConfluxSubscription};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::protocol::{
     parse_request_line, ProtocolError, Request, RequestCommand, Response, PROTOCOL_VERSION,
 };
 
+#[derive(Debug, Default)]
+struct EngineStateData {
+    profile: Option<ConfluxSubscription>,
+    last_error: Option<String>,
+    last_fetch_url: Option<String>,
+}
+
 /// Shared daemon state exposed through IPC.
 #[derive(Debug)]
 pub struct EngineState {
-    pub profile: Arc<RwLock<Option<ConfluxSubscription>>>,
     pub started_at: Instant,
-    pub last_error: Arc<RwLock<Option<String>>>,
-    pub last_fetch_url: Arc<RwLock<Option<String>>>,
+    data: Arc<RwLock<EngineStateData>>,
+    /// Serializes FETCH handlers so the last completed fetch matches request order.
+    pub fetch_lock: Arc<Mutex<()>>,
 }
 
 impl Default for EngineState {
@@ -29,26 +36,36 @@ impl Default for EngineState {
 impl EngineState {
     pub fn new() -> Self {
         Self {
-            profile: Arc::new(RwLock::new(None)),
             started_at: Instant::now(),
-            last_error: Arc::new(RwLock::new(None)),
-            last_fetch_url: Arc::new(RwLock::new(None)),
+            data: Arc::new(RwLock::new(EngineStateData::default())),
+            fetch_lock: Arc::new(Mutex::new(())),
         }
     }
 
     pub async fn status_json(&self) -> Value {
-        let profile = self.profile.read().await;
-        let last_fetch_url = self.last_fetch_url.read().await.clone();
+        let data = self.data.read().await;
         json!({
             "version": env!("CARGO_PKG_VERSION"),
             "protocol_version": PROTOCOL_VERSION,
             "uptime_secs": self.started_at.elapsed().as_secs(),
-            "has_profile": profile.is_some(),
-            "node_count": profile.as_ref().map(|p| p.nodes.len()).unwrap_or(0),
-            "title": profile.as_ref().map(|p| p.title.clone()),
-            "last_fetch_url": conflux_protocol::redact_url_for_ipc(&last_fetch_url),
-            "last_error": self.last_error.read().await.clone(),
+            "has_profile": data.profile.is_some(),
+            "node_count": data.profile.as_ref().map(|p| p.nodes.len()).unwrap_or(0),
+            "title": data.profile.as_ref().map(|p| p.title.clone()),
+            "last_fetch_url": conflux_protocol::redact_url_for_ipc(&data.last_fetch_url),
+            "last_error": data.last_error.clone(),
         })
+    }
+
+    pub async fn set_profile(&self, url: String, profile: ConfluxSubscription) {
+        let mut data = self.data.write().await;
+        data.last_fetch_url = Some(url);
+        data.last_error = None;
+        data.profile = Some(profile);
+    }
+
+    pub async fn set_fetch_error(&self, message: String) {
+        let mut data = self.data.write().await;
+        data.last_error = Some(message);
     }
 }
 
@@ -121,9 +138,12 @@ impl IpcServer {
     async fn run_unix(&self) -> Result<(), ProtocolError> {
         use tokio::net::UnixListener;
 
+        let _daemon_lock = DaemonLock::acquire(&self.endpoint)?;
+
         let _ = std::fs::remove_file(&self.endpoint);
         let listener = UnixListener::bind(&self.endpoint)
             .map_err(|err| ProtocolError::Transport(err.to_string()))?;
+        restrict_unix_socket_permissions(&self.endpoint)?;
 
         loop {
             let (stream, _) = listener
@@ -138,6 +158,55 @@ impl IpcServer {
             });
         }
     }
+}
+
+/// Exclusive process lock preventing multiple daemons on the same IPC endpoint.
+#[cfg(unix)]
+#[derive(Debug)]
+struct DaemonLock {
+    _file: std::fs::File,
+}
+
+#[cfg(unix)]
+impl DaemonLock {
+    fn acquire(endpoint: &str) -> Result<Self, ProtocolError> {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        use std::os::unix::io::AsRawFd;
+
+        let lock_path = format!("{endpoint}.lock");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|err| {
+                ProtocolError::Transport(format!("failed to open daemon lock file: {err}"))
+            })?;
+
+        let fd = file.as_raw_fd();
+        let ret = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+        if ret != 0 {
+            return Err(ProtocolError::Transport(
+                "another conflux daemon is already running on this endpoint".into(),
+            ));
+        }
+
+        file.set_len(0)
+            .map_err(|err| ProtocolError::Transport(err.to_string()))?;
+        writeln!(file, "{}", std::process::id())
+            .map_err(|err| ProtocolError::Transport(err.to_string()))?;
+
+        Ok(Self { _file: file })
+    }
+}
+
+#[cfg(unix)]
+fn restrict_unix_socket_permissions(endpoint: &str) -> Result<(), ProtocolError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::set_permissions(endpoint, std::fs::Permissions::from_mode(0o600))
+        .map_err(|err| ProtocolError::Transport(err.to_string()))
 }
 
 async fn serve_connection(
@@ -185,27 +254,29 @@ async fn handle_request(request: Request, state: &EngineState) -> Response {
             "engine": env!("CARGO_PKG_VERSION"),
         })),
         RequestCommand::Status => Response::ok(state.status_json().await),
-        RequestCommand::GetProfile => match state.profile.read().await.clone() {
-            Some(profile) => match serde_json::to_value(profile.redacted_for_ipc()) {
-                Ok(value) => Response::ok(value),
-                Err(err) => Response::err(format!("failed to serialize profile: {err}")),
-            },
-            None => Response::err("no profile loaded"),
-        },
+        RequestCommand::GetProfile => {
+            let profile = state.data.read().await.profile.clone();
+            match profile {
+                Some(profile) => match serde_json::to_value(profile.redacted_for_ipc()) {
+                    Ok(value) => Response::ok(value),
+                    Err(err) => Response::err(format!("failed to serialize profile: {err}")),
+                },
+                None => Response::err("no profile loaded"),
+            }
+        }
         RequestCommand::Fetch => {
             let url = request.url.expect("validated by parse_request_line");
+            let _fetch_guard = state.fetch_lock.lock().await;
             match fetch_and_normalize(&url).await {
                 Ok(profile) => {
-                    *state.last_fetch_url.write().await = Some(url);
-                    *state.last_error.write().await = None;
-                    let summary = profile.fetch_summary();
-                    *state.profile.write().await = Some(profile);
-                    Response::ok(summary)
+                    let response_data = profile.fetch_ipc_response_data();
+                    state.set_profile(url, profile).await;
+                    Response::ok(response_data)
                 }
                 Err(err) => {
                     let message = err.to_string();
                     error!(error = %message, "fetch failed");
-                    *state.last_error.write().await = Some(message.clone());
+                    state.set_fetch_error(message.clone()).await;
                     Response::err(message)
                 }
             }
@@ -255,11 +326,60 @@ pub async fn exchange(
 mod tests {
     use super::*;
     use crate::protocol::{Request, ResponseStatus};
+    use conflux_protocol::{ConfluxNode, ConfluxSubscription, Protocol};
 
     #[tokio::test]
     async fn handles_ping_in_memory() {
         let state = Arc::new(EngineState::new());
         let response = handle_request(Request::ping(), &state).await;
         assert_eq!(response.status, ResponseStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn status_reflects_atomic_profile_update() {
+        let state = EngineState::new();
+        let profile = ConfluxSubscription {
+            title: "Test".to_string(),
+            source_url: None,
+            update_interval_hours: 0,
+            user_info: None,
+            support_url: None,
+            announce: None,
+            nodes: vec![ConfluxNode {
+                id: "node-1".to_string(),
+                tag: "node".to_string(),
+                protocol: Protocol::Vless,
+                source: Default::default(),
+                server: "example.com".to_string(),
+                port: 443,
+                ports: None,
+                credentials: conflux_protocol::Credentials::None,
+                transport: Default::default(),
+                tls: None,
+                reality: None,
+                flow: None,
+                encryption: None,
+                packet_encoding: None,
+                method: None,
+                obfs: None,
+                meta: Default::default(),
+                raw: conflux_protocol::RawPayload::Uri {
+                    value: "vless://example".to_string(),
+                },
+                native_profile: None,
+                native_tun_cidr: None,
+                usage_url: None,
+            }],
+            extras: Default::default(),
+        };
+
+        state
+            .set_profile("https://example.com/sub".to_string(), profile)
+            .await;
+
+        let status = state.status_json().await;
+        assert_eq!(status["node_count"], 1);
+        assert_eq!(status["title"], "Test");
+        assert_eq!(status["last_fetch_url"], "[redacted]");
     }
 }

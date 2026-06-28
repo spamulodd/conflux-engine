@@ -105,7 +105,7 @@ Clients send JSON request envelopes; the daemon replies with `{"v":1,"status":"O
 | Command | v0.1 behavior |
 |---------|---------------|
 | `PING` | Health + protocol/engine version |
-| `FETCH` | Download subscription; returns summary (`node_count`, quota headers) |
+| `FETCH` | Download subscription; returns summary plus redacted `profile` (serialized fetch lock) |
 | `GET_PROFILE` | Cached profile with credentials redacted |
 | `STATUS` | Daemon uptime and cache state |
 

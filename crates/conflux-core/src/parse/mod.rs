@@ -130,8 +130,7 @@ fn apply_body_directive(directive: &str, metadata: &mut BodyMetadata) {
 }
 
 fn detect_format(body: &str) -> SubscriptionFormat {
-    let trimmed = body.trim_start();
-    if trimmed.contains("proxies:") || trimmed.starts_with("---") {
+    if has_clash_yaml_markers(body) {
         return SubscriptionFormat::ClashYaml;
     }
 
@@ -140,6 +139,21 @@ fn detect_format(body: &str) -> SubscriptionFormat {
     }
 
     SubscriptionFormat::Unknown
+}
+
+/// True when the body has top-level Clash YAML keys, not incidental `proxies:` substrings.
+fn has_clash_yaml_markers(body: &str) -> bool {
+    let trimmed = body.trim_start();
+    if trimmed.starts_with("---") {
+        return true;
+    }
+
+    body.lines().any(|line| {
+        let key = line.trim_start();
+        key.starts_with("proxies:")
+            || key.starts_with("proxy-groups:")
+            || key.starts_with("rules:")
+    })
 }
 
 #[cfg(test)]

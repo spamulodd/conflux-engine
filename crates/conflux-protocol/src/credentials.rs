@@ -27,6 +27,24 @@ pub enum Credentials {
 }
 
 impl Credentials {
+    /// Stable fingerprint material for node identity hashing.
+    pub fn fingerprint(&self) -> String {
+        match self {
+            Self::Uuid { id } => format!("uuid:{id}"),
+            Self::Password { password } => format!("password:{password}"),
+            Self::Shadowsocks { method, password } => format!("ss:{method}:{password}"),
+            Self::KeyPair {
+                private_key,
+                public_key,
+            } => format!(
+                "keypair:{private_key}:{}",
+                public_key.as_deref().unwrap_or("")
+            ),
+            Self::NativeKey { key_hex } => format!("native:{key_hex}"),
+            Self::None => "none".to_string(),
+        }
+    }
+
     pub fn redacted_for_ipc(&self) -> Self {
         use crate::redact::IPC_REDACTED;
 

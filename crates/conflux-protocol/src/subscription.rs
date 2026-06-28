@@ -62,6 +62,19 @@ impl ConfluxSubscription {
         })
     }
 
+    /// FETCH IPC payload: summary plus redacted profile for single-round-trip clients.
+    pub fn fetch_ipc_response_data(&self) -> serde_json::Value {
+        let redacted = self.redacted_for_ipc();
+        let mut data = self.fetch_summary();
+        if let serde_json::Value::Object(ref mut map) = data {
+            map.insert(
+                "profile".to_string(),
+                serde_json::to_value(&redacted).expect("redacted profile serializes"),
+            );
+        }
+        data
+    }
+
     /// Profile safe for IPC transport: credentials and raw URIs are redacted.
     pub fn redacted_for_ipc(&self) -> Self {
         use crate::redact::{redact_optional_url, redact_sensitive_json};

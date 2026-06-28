@@ -32,7 +32,10 @@ impl IpcClient {
     pub async fn fetch(&self, url: &str) -> Result<ConfluxSubscription, ProtocolError> {
         let response = self.send(&Request::fetch(url)).await?;
         match response.status {
-            ResponseStatus::Ok => self.get_profile().await,
+            ResponseStatus::Ok => match profile_from_fetch_response(response) {
+                Ok(profile) => Ok(profile),
+                Err(_) => self.get_profile().await,
+            },
             ResponseStatus::Err => Err(ProtocolError::Transport(
                 response.msg.unwrap_or_else(|| "unknown IPC error".into()),
             )),
@@ -94,6 +97,17 @@ fn response_into_profile(response: Response) -> Result<ConfluxSubscription, Prot
             response.msg.unwrap_or_else(|| "unknown IPC error".into()),
         )),
     }
+}
+
+fn profile_from_fetch_response(response: Response) -> Result<ConfluxSubscription, ProtocolError> {
+    let data = response
+        .data
+        .ok_or_else(|| ProtocolError::Transport("fetch response missing data".into()))?;
+    let profile = data.get("profile").ok_or_else(|| {
+        ProtocolError::Transport("fetch response missing embedded profile".into())
+    })?;
+    serde_json::from_value(profile.clone())
+        .map_err(|err| ProtocolError::InvalidRequest(err.to_string()))
 }
 
 #[cfg(test)]
