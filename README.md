@@ -4,11 +4,11 @@ Universal subscription fetch, parse, and normalize engine for proxy and VPN clie
 
 ## Features
 
-- **HTTP subscription fetch** — TLS via rustls; parses standard subscription headers (`Profile-Title`, `Subscription-Userinfo`, `Profile-Update-Interval`, `Announce`, `Support-Url`)
+- **HTTP subscription fetch** — TLS via rustls; parses standard subscription headers (`Profile-Title`, `Subscription-Userinfo`, `Profile-Update-Interval`, `Announce`, `Support-Url`); **`happ://crypt*` links** (v0.2) via bundled `happ-decrypt.exe` helper
 - **Multi-format parsing** — Base64 URI lists, plaintext URI lines, Clash YAML (`proxies[]`)
 - **Protocol coverage (v0.1)** — VLESS, VMess, Shadowsocks, Trojan, Hysteria2 (`hy2` alias), native `himera://` tunnel URIs
 - **Normalized profile model** — backend-agnostic `ConfluxSubscription` / `ConfluxNode` types with a published JSON Schema
-- **sing-box backend library** — translate normalized profiles to sing-box JSON and supervise a subprocess (used from Rust; daemon `CONNECT` in v0.2)
+- **sing-box backend library** — translate normalized profiles to sing-box JSON and supervise a subprocess (used from Rust; daemon `CONNECT`/`DISCONNECT` IPC in v0.2.1)
 - **Windows IPC** — JSON envelope protocol v1 over `\\.\pipe\conflux-engine` (Unix socket for CI/dev on Linux/macOS)
 - **CLI tools** — `conflux` for fetch/convert/validate; `confluxd` for IPC daemon mode
 
@@ -102,14 +102,16 @@ Full heuristics: [docs/subscription-formats.md](docs/subscription-formats.md)
 
 Clients send JSON request envelopes; the daemon replies with `{"v":1,"status":"OK","data":{...}}` or `{"v":1,"status":"ERR","msg":"..."}`.
 
-| Command | v0.1 behavior |
+| Command | v0.2 behavior |
 |---------|---------------|
 | `PING` | Health + protocol/engine version |
 | `FETCH` | Download subscription; returns summary plus redacted `profile` (serialized fetch lock) |
 | `GET_PROFILE` | Cached profile with credentials redacted |
-| `STATUS` | Daemon uptime and cache state |
+| `STATUS` | Daemon uptime, cache state, and sing-box backend state |
+| `CONNECT` | Apply last fetched profile with `node_id`, generate sing-box config, start subprocess |
+| `DISCONNECT` | Stop sing-box subprocess |
 
-`CONNECT` / `DISCONNECT` (drive sing-box from the daemon) are planned for **v0.2**.
+Place `sing-box.exe` in `engines/` next to `confluxd.exe`, or set `SINGBOX_PATH`.
 
 Protocol reference: [docs/ipc-protocol.md](docs/ipc-protocol.md) · C# notes: [docs/windows-integration.md](docs/windows-integration.md)
 

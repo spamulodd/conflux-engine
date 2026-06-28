@@ -103,6 +103,10 @@ impl SingboxBackend {
         self.state
     }
 
+    pub fn selected_node_id(&self) -> Option<&str> {
+        self.selected_node_id.as_deref()
+    }
+
     pub fn config(&self) -> Option<&Value> {
         self.config.as_ref()
     }
@@ -141,6 +145,11 @@ impl SingboxBackend {
             self.state = BackendState::Error;
             self.last_error = Some("sing-box process exited unexpectedly".to_string());
         }
+    }
+
+    /// Refresh lifecycle state before IPC status or connect handlers read it.
+    pub fn refresh_running_state_for_ipc(&mut self) {
+        self.refresh_running_state();
     }
 }
 

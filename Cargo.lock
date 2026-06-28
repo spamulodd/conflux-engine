@@ -179,7 +179,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "conflux-backend"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "conflux-core",
  "conflux-protocol",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "conflux-cli"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "conflux-core",
@@ -205,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "conflux-core"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "base64",
  "conflux-protocol",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "conflux-daemon"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "conflux-core",
  "conflux-ipc",
@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "conflux-engine"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "conflux-backend",
  "conflux-core",
@@ -247,8 +247,9 @@ dependencies = [
 
 [[package]]
 name = "conflux-ipc"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
+ "conflux-backend",
  "conflux-core",
  "conflux-protocol",
  "libc",
@@ -261,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "conflux-protocol"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",

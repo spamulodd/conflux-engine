@@ -24,7 +24,7 @@ impl GenerateOptions {
             proxy_tag: "proxy".to_string(),
             tun_tag: "tun-in".to_string(),
             interface_name: "conflux-tun".to_string(),
-            include_tun_inbound: true,
+            include_tun_inbound: false,
             ..Self::default()
         }
     }
@@ -36,23 +36,34 @@ pub fn generate_config(
     options: &GenerateOptions,
 ) -> Result<Value, BackendError> {
     let node = select_node(subscription, options.selected_node_id.as_deref())?;
-    let proxy_outbound = node_to_outbound(node, &options.proxy_tag)?;
+    let outbound_tag = if options.include_tun_inbound {
+        options.proxy_tag.clone()
+    } else {
+        "proxy".to_string()
+    };
+    let proxy_outbound = node_to_outbound(node, &outbound_tag)?;
     let mut outbounds = vec![proxy_outbound];
     outbounds.push(json!({ "type": "direct", "tag": "direct" }));
     outbounds.push(json!({ "type": "dns", "tag": "dns-out" }));
 
     let mut inbounds = Vec::new();
+    let mixed_inbound_tag = "mixed-in";
     if options.include_tun_inbound {
         inbounds.push(tun_inbound(&options.tun_tag, &options.interface_name));
+    } else {
+        inbounds.push(mixed_inbound(mixed_inbound_tag));
     }
 
     let route_rules = if options.include_tun_inbound {
         vec![
             json!({ "protocol": "dns", "outbound": "dns-out" }),
-            json!({ "inbound": options.tun_tag, "outbound": options.proxy_tag }),
+            json!({ "inbound": options.tun_tag, "outbound": outbound_tag }),
         ]
     } else {
-        vec![json!({ "protocol": "dns", "outbound": "dns-out" })]
+        vec![
+            json!({ "protocol": "dns", "outbound": "dns-out" }),
+            json!({ "inbound": mixed_inbound_tag, "outbound": outbound_tag }),
+        ]
     };
 
     Ok(json!({
@@ -64,7 +75,7 @@ pub fn generate_config(
         "outbounds": outbounds,
         "route": {
             "rules": route_rules,
-            "final": options.proxy_tag
+            "final": outbound_tag
         }
     }))
 }
@@ -112,6 +123,15 @@ fn tun_inbound(tag: &str, interface_name: &str) -> Value {
         "inet4_address": "172.19.0.1/30",
         "auto_route": true,
         "strict_route": true
+    })
+}
+
+fn mixed_inbound(tag: &str) -> Value {
+    json!({
+        "type": "mixed",
+        "tag": tag,
+        "listen": "127.0.0.1",
+        "listen_port": 7890
     })
 }
 

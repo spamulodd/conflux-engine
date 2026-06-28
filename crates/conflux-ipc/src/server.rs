@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use conflux_backend::{Backend, SingboxBackend};
 use conflux_core::{fetch_and_normalize, ConfluxSubscription};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -19,10 +20,10 @@ struct EngineStateData {
 }
 
 /// Shared daemon state exposed through IPC.
-#[derive(Debug)]
 pub struct EngineState {
     pub started_at: Instant,
     data: Arc<RwLock<EngineStateData>>,
+    backend: Arc<Mutex<Option<SingboxBackend>>>,
     /// Serializes FETCH handlers so the last completed fetch matches request order.
     pub fetch_lock: Arc<Mutex<()>>,
 }
@@ -35,15 +36,33 @@ impl Default for EngineState {
 
 impl EngineState {
     pub fn new() -> Self {
+        let backend = SingboxBackend::new().ok();
         Self {
             started_at: Instant::now(),
             data: Arc::new(RwLock::new(EngineStateData::default())),
+            backend: Arc::new(Mutex::new(backend)),
             fetch_lock: Arc::new(Mutex::new(())),
         }
     }
 
+    async fn backend_status_fields(&self) -> (String, Option<String>, Option<String>) {
+        let mut backend = self.backend.lock().await;
+        let Some(backend) = backend.as_mut() else {
+            return ("idle".to_string(), None, None);
+        };
+
+        backend.refresh_running_state_for_ipc();
+        let health = backend.health();
+        (
+            health.state.as_str().to_string(),
+            backend.selected_node_id().map(str::to_string),
+            health.message,
+        )
+    }
+
     pub async fn status_json(&self) -> Value {
         let data = self.data.read().await;
+        let (backend_state, selected_node_id, backend_error) = self.backend_status_fields().await;
         json!({
             "version": env!("CARGO_PKG_VERSION"),
             "protocol_version": PROTOCOL_VERSION,
@@ -53,6 +72,9 @@ impl EngineState {
             "title": data.profile.as_ref().map(|p| p.title.clone()),
             "last_fetch_url": conflux_protocol::redact_url_for_ipc(&data.last_fetch_url),
             "last_error": data.last_error.clone(),
+            "backend_state": backend_state,
+            "selected_node_id": selected_node_id,
+            "backend_error": backend_error,
         })
     }
 
@@ -281,6 +303,58 @@ async fn handle_request(request: Request, state: &EngineState) -> Response {
                 }
             }
         }
+        RequestCommand::Connect => {
+            let node_id = request.node_id.expect("validated by parse_request_line");
+            handle_connect(state, &node_id).await
+        }
+        RequestCommand::Disconnect => handle_disconnect(state).await,
+    }
+}
+
+async fn handle_connect(state: &EngineState, node_id: &str) -> Response {
+    let profile = state.data.read().await.profile.clone();
+    let Some(profile) = profile else {
+        return Response::err("no profile loaded; fetch a subscription first");
+    };
+
+    let mut backend_guard = state.backend.lock().await;
+    if backend_guard.is_none() {
+        match SingboxBackend::new() {
+            Ok(backend) => *backend_guard = Some(backend),
+            Err(err) => return Response::err(err.to_string()),
+        }
+    }
+
+    let backend = backend_guard.as_mut().expect("initialized above");
+
+    if let Err(err) = backend.apply_profile(&profile, Some(node_id)) {
+        return Response::err(err.to_string());
+    }
+
+    match backend.start() {
+        Ok(()) => Response::ok(json!({
+            "backend_state": backend.state().as_str(),
+            "selected_node_id": backend.selected_node_id(),
+        })),
+        Err(err) => Response::err(err.to_string()),
+    }
+}
+
+async fn handle_disconnect(state: &EngineState) -> Response {
+    let mut backend_guard = state.backend.lock().await;
+    let Some(backend) = backend_guard.as_mut() else {
+        return Response::ok(json!({
+            "backend_state": "idle",
+            "selected_node_id": null,
+        }));
+    };
+
+    match backend.stop() {
+        Ok(()) => Response::ok(json!({
+            "backend_state": backend.state().as_str(),
+            "selected_node_id": backend.selected_node_id(),
+        })),
+        Err(err) => Response::err(err.to_string()),
     }
 }
 

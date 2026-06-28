@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "JSON line IPC over Windows named pipes for conflux-engine"
 
 [dependencies]
+conflux-backend = { path = "../conflux-backend" }
 conflux-core = { path = "../conflux-core" }
 conflux-protocol = { path = "../conflux-protocol" }
 serde = { workspace = true }

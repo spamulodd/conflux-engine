@@ -1,9 +1,12 @@
 //! HTTP subscription fetch and response header parsing.
 
 mod headers;
+mod happ;
 
 use conflux_protocol::{ConfluxError, SubscriptionHeaders};
 use reqwest::Client;
+
+pub use happ::resolve_subscription_url;
 
 pub use headers::{
     parse_announce, parse_profile_title, parse_response_headers, parse_support_url,
@@ -21,7 +24,7 @@ pub struct FetchResult {
 /// Shared HTTP client configured with rustls.
 fn http_client() -> Result<Client, ConfluxError> {
     Client::builder()
-        .user_agent("conflux-engine/0.1.0")
+        .user_agent("conflux-engine/0.2.0")
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|err| ConfluxError::Http(err.to_string()))
@@ -29,7 +32,8 @@ fn http_client() -> Result<Client, ConfluxError> {
 
 /// Download a subscription URL and parse response headers.
 pub async fn fetch_subscription(url: &str) -> Result<FetchResult, ConfluxError> {
-    let trimmed = url.trim();
+    let fetch_url = resolve_subscription_url(url)?;
+    let trimmed = fetch_url.trim();
     if trimmed.is_empty() {
         return Err(ConfluxError::InvalidUrl("URL is empty".into()));
     }
@@ -63,7 +67,7 @@ pub async fn fetch_subscription(url: &str) -> Result<FetchResult, ConfluxError> 
     Ok(FetchResult {
         body,
         headers,
-        source_url: trimmed.to_string(),
+        source_url: url.trim().to_string(),
     })
 }
 

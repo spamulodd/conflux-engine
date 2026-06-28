@@ -59,6 +59,30 @@ impl IpcClient {
         }
     }
 
+    pub async fn connect(&self, node_id: &str) -> Result<Value, ProtocolError> {
+        let response = self.send(&Request::connect(node_id)).await?;
+        match response.status {
+            ResponseStatus::Ok => response
+                .data
+                .ok_or_else(|| ProtocolError::Transport("connect response missing data".into())),
+            ResponseStatus::Err => Err(ProtocolError::Transport(
+                response.msg.unwrap_or_else(|| "unknown IPC error".into()),
+            )),
+        }
+    }
+
+    pub async fn disconnect(&self) -> Result<Value, ProtocolError> {
+        let response = self.send(&Request::disconnect()).await?;
+        match response.status {
+            ResponseStatus::Ok => response.data.ok_or_else(|| {
+                ProtocolError::Transport("disconnect response missing data".into())
+            }),
+            ResponseStatus::Err => Err(ProtocolError::Transport(
+                response.msg.unwrap_or_else(|| "unknown IPC error".into()),
+            )),
+        }
+    }
+
     pub async fn send(&self, request: &Request) -> Result<Response, ProtocolError> {
         if request.v != PROTOCOL_VERSION {
             return Err(ProtocolError::UnsupportedVersion(request.v));
