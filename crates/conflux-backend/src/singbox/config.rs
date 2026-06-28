@@ -69,7 +69,11 @@ pub fn generate_config(
     Ok(json!({
         "log": { "level": "info" },
         "dns": {
-            "servers": [{ "tag": "dns-direct", "address": "1.1.1.1" }]
+            "servers": [{
+                "type": "udp",
+                "tag": "dns-direct",
+                "server": "1.1.1.1"
+            }]
         },
         "inbounds": inbounds,
         "outbounds": outbounds,

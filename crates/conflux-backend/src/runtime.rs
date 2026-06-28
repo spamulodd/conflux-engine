@@ -248,6 +248,13 @@ impl Backend for SingboxBackend {
 
         match self.state {
             BackendState::Idle => return Ok(()),
+            BackendState::Error => {
+                let _ = self.process.stop();
+                self.cleanup_config()?;
+                self.state = BackendState::Idle;
+                self.last_error = None;
+                return Ok(());
+            }
             BackendState::Stopping => {
                 return Err(BackendError::InvalidTransition {
                     from: self.state.as_str().to_string(),

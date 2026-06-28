@@ -1,14 +1,14 @@
 ---
 source: crates/conflux-backend/src/singbox/config.rs
-assertion_line: 487
 expression: redacted
 ---
 {
   "dns": {
     "servers": [
       {
-        "address": "1.1.1.1",
-        "tag": "dns-direct"
+        "server": "<REDACTED_SERVER>",
+        "tag": "dns-direct",
+        "type": "udp"
       }
     ]
   },

@@ -29,7 +29,7 @@ const USER_AGENTS: &[&str] = &[
     "ClashMeta",
     "mihomo",
     "ClashForAndroid/2.5.12",
-    "conflux-engine/0.2.2",
+    "conflux-engine/0.2.3",
     "sing-box",
     "v2rayNG/1.8.29",
 ];

@@ -6,8 +6,9 @@ expression: redacted
   "dns": {
     "servers": [
       {
-        "address": "1.1.1.1",
-        "tag": "dns-direct"
+        "server": "<REDACTED_SERVER>",
+        "tag": "dns-direct",
+        "type": "udp"
       }
     ]
   },

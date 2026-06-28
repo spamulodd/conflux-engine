@@ -1,5 +1,7 @@
 # conflux-engine
 
+[![CI](https://github.com/spamulodd/conflux-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/spamulodd/conflux-engine/actions/workflows/ci.yml)
+
 Universal subscription fetch, parse, and normalize engine for proxy and VPN clients. Conflux-engine downloads provider subscriptions, detects their format, maps nodes to a canonical profile model, and ships a [sing-box](https://sing-box.sagernet.org/) config generator for the data plane. It is designed for integration with desktop VPN clients via a JSON-line IPC daemon.
 
 ## Features
