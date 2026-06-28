@@ -1,9 +1,8 @@
 use conflux_protocol::{
-    ConfluxError, ConfluxNode, ConfluxSubscription, Credentials, NodeMeta, NodeSource, ObfsConfig,
-    Protocol, RawPayload, RealityConfig, SubscriptionHeaders, TlsConfig, Transport, TransportKind,
+    stable_node_id, ConfluxError, ConfluxNode, ConfluxSubscription, Credentials, NodeMeta,
+    NodeSource, ObfsConfig, Protocol, RawPayload, RealityConfig, SubscriptionHeaders, TlsConfig,
+    Transport, TransportKind,
 };
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use url::Url;
 use uuid::Uuid;
 
@@ -542,7 +541,7 @@ fn normalize_clash_proxy(
     let transport = transport_from_type(network, &clash);
 
     Ok(ConfluxNode {
-        id: node_id(protocol, &server, port, &tag),
+        id: stable_node_id(protocol, &server, port, &credentials, &transport),
         tag,
         protocol,
         source: source.clone(),
@@ -589,7 +588,7 @@ fn base_node(
     ports: Option<Vec<String>>,
 ) -> ConfluxNode {
     ConfluxNode {
-        id: node_id(protocol, &server, port, &tag),
+        id: stable_node_id(protocol, &server, port, &credentials, &transport),
         tag,
         protocol,
         source,
@@ -611,15 +610,6 @@ fn base_node(
         native_tun_cidr: None,
         usage_url: None,
     }
-}
-
-fn node_id(protocol: Protocol, server: &str, port: u16, tag: &str) -> String {
-    let mut hasher = DefaultHasher::new();
-    protocol.hash(&mut hasher);
-    server.hash(&mut hasher);
-    port.hash(&mut hasher);
-    tag.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
 }
 
 fn parse_url(raw: &str) -> Result<Url, ConfluxError> {
@@ -874,6 +864,18 @@ hysteria2://password@example.com:8443/?sni=example.com#D
         assert_eq!(sub.nodes.len(), 1);
         assert_eq!(sub.nodes[0].protocol, Protocol::Vmess);
         assert_eq!(sub.nodes[0].tag, "VMess Node");
+    }
+
+    #[test]
+    fn distinct_credentials_get_distinct_ids() {
+        let body = "\
+vless://11111111-1111-1111-1111-111111111111@cdn.example.com:443#香港
+vless://22222222-2222-2222-2222-222222222222@cdn.example.com:443#香港
+";
+        let parsed = parse_body(body, None).expect("parse");
+        let sub = normalize(parsed, None, None).expect("normalize");
+        assert_eq!(sub.nodes.len(), 2);
+        assert_ne!(sub.nodes[0].id, sub.nodes[1].id);
     }
 
     #[test]

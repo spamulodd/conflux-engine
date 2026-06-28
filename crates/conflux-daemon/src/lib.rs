@@ -44,13 +44,12 @@ pub async fn run_daemon(loaded: LoadedConfig) -> Result<(), DaemonError> {
     if let Some(url) = loaded.config.subscription_url.as_deref() {
         match fetch_and_normalize(url).await {
             Ok(profile) => {
-                *state.last_fetch_url.write().await = Some(url.to_string());
-                *state.profile.write().await = Some(profile);
+                state.set_profile(url.to_string(), profile).await;
                 info!("prefetched subscription from config");
             }
             Err(err) => {
                 error!(error = %err, "initial subscription prefetch failed");
-                *state.last_error.write().await = Some(err.to_string());
+                state.set_fetch_error(err.to_string()).await;
             }
         }
     }
