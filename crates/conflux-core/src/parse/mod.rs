@@ -130,8 +130,7 @@ fn apply_body_directive(directive: &str, metadata: &mut BodyMetadata) {
 }
 
 fn detect_format(body: &str) -> SubscriptionFormat {
-    let trimmed = body.trim_start();
-    if trimmed.contains("proxies:") || trimmed.starts_with("---") {
+    if has_clash_yaml_markers(body) {
         return SubscriptionFormat::ClashYaml;
     }
 
@@ -140,6 +139,21 @@ fn detect_format(body: &str) -> SubscriptionFormat {
     }
 
     SubscriptionFormat::Unknown
+}
+
+/// True when the body has top-level Clash YAML keys, not incidental `proxies:` substrings.
+fn has_clash_yaml_markers(body: &str) -> bool {
+    let trimmed = body.trim_start();
+    if trimmed.starts_with("---") {
+        return true;
+    }
+
+    body.lines().any(|line| {
+        let key = line.trim_start();
+        key.starts_with("proxies:")
+            || key.starts_with("proxy-groups:")
+            || key.starts_with("rules:")
+    })
 }
 
 #[cfg(test)]
@@ -176,5 +190,15 @@ mod tests {
         assert_eq!(result.nodes.len(), 2);
         assert!(result.nodes.iter().any(|node| node.scheme == "vless"));
         assert!(result.nodes.iter().any(|node| node.scheme == "ss"));
+    }
+
+    #[test]
+    fn does_not_misclassify_uri_list_with_proxies_substring() {
+        let body = format!(
+            "vless://00000000-0000-0000-0000-000000000001@example.com:443?remarks=Configure%20proxies:%20auto#Node-A\n{SS}"
+        );
+        let result = parse_body(&body, None).expect("parse");
+        assert_eq!(result.format, SubscriptionFormat::UriList);
+        assert_eq!(result.nodes.len(), 2);
     }
 }

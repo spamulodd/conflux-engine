@@ -17,6 +17,7 @@ pub fn normalize(
     source_url: Option<String>,
 ) -> Result<ConfluxSubscription, ConfluxError> {
     let mut nodes = Vec::with_capacity(parsed.nodes.len());
+    let mut skipped = 0usize;
     for raw in parsed.nodes {
         let mut source = NodeSource {
             subscription_url: source_url.clone(),
@@ -24,7 +25,19 @@ pub fn normalize(
             line_index: raw.line_index,
             parser: Some(parser_name(&raw)),
         };
-        nodes.push(normalize_node(raw, &mut source)?);
+        match normalize_node(raw, &mut source) {
+            Ok(node) => nodes.push(node),
+            Err(err) if is_skippable_node_error(&err) => skipped += 1,
+            Err(err) => return Err(err),
+        }
+    }
+
+    if nodes.is_empty() {
+        return Err(ConfluxError::Normalize(if skipped > 0 {
+            format!("all {skipped} nodes failed normalization")
+        } else {
+            "no nodes to normalize".into()
+        }));
     }
 
     let headers = headers.unwrap_or_default();
@@ -56,6 +69,15 @@ fn parser_name(raw: &RawNode) -> String {
     } else {
         "uri".to_string()
     }
+}
+
+fn is_skippable_node_error(err: &ConfluxError) -> bool {
+    matches!(
+        err,
+        ConfluxError::UnsupportedProtocol(_)
+            | ConfluxError::InvalidUri(_)
+            | ConfluxError::Parse(_)
+    )
 }
 
 fn pick_title(headers: &SubscriptionHeaders, body: &BodyMetadata) -> String {
@@ -901,5 +923,19 @@ hysteria2://password@example.com:8443/?sni=example.com#D
             sub.support_url.as_deref(),
             Some("https://example.com/support")
         );
+    }
+
+    #[test]
+    fn skips_malformed_nodes_instead_of_aborting() {
+        use base64::Engine;
+        let bad = base64::engine::general_purpose::STANDARD.encode("not-json");
+        let good = base64::engine::general_purpose::STANDARD.encode(
+            r#"{"v":"2","ps":"Good","add":"example.com","port":"443","id":"00000000-0000-0000-0000-000000000001","aid":"0","net":"tcp"}"#,
+        );
+        let body = format!("vmess://{bad}\nvmess://{good}");
+        let parsed = parse_body(&body, None).expect("parse");
+        let sub = normalize(parsed, None, None).expect("normalize");
+        assert_eq!(sub.nodes.len(), 1);
+        assert_eq!(sub.nodes[0].tag, "Good");
     }
 }
