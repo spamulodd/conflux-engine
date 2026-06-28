@@ -123,6 +123,7 @@ impl IpcServer {
         let _ = std::fs::remove_file(&self.endpoint);
         let listener = UnixListener::bind(&self.endpoint)
             .map_err(|err| ProtocolError::Transport(err.to_string()))?;
+        restrict_unix_socket_permissions(&self.endpoint)?;
 
         loop {
             let (stream, _) = listener
@@ -137,6 +138,14 @@ impl IpcServer {
             });
         }
     }
+}
+
+#[cfg(unix)]
+fn restrict_unix_socket_permissions(endpoint: &str) -> Result<(), ProtocolError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::set_permissions(endpoint, std::fs::Permissions::from_mode(0o600))
+        .map_err(|err| ProtocolError::Transport(err.to_string()))
 }
 
 async fn serve_connection(
@@ -260,5 +269,30 @@ mod tests {
         let state = Arc::new(EngineState::new());
         let response = handle_request(Request::ping(), &state).await;
         assert_eq!(response.status, ResponseStatus::Ok);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_socket_permissions_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!(
+            "conflux-ipc-perms-test-{}.sock",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let listener = std::os::unix::net::UnixListener::bind(&path).expect("bind socket");
+        restrict_unix_socket_permissions(&path.to_string_lossy()).expect("restrict perms");
+
+        let mode = std::fs::metadata(&path)
+            .expect("socket metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+
+        drop(listener);
+        let _ = std::fs::remove_file(path);
     }
 }
