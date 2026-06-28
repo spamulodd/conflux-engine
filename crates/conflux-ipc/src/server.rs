@@ -4,7 +4,7 @@ use std::time::Instant;
 use conflux_core::{fetch_and_normalize, ConfluxSubscription};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::protocol::{
@@ -18,6 +18,8 @@ pub struct EngineState {
     pub started_at: Instant,
     pub last_error: Arc<RwLock<Option<String>>>,
     pub last_fetch_url: Arc<RwLock<Option<String>>>,
+    /// Serializes FETCH handlers so the last completed fetch matches request order.
+    pub fetch_lock: Arc<Mutex<()>>,
 }
 
 impl Default for EngineState {
@@ -33,6 +35,7 @@ impl EngineState {
             started_at: Instant::now(),
             last_error: Arc::new(RwLock::new(None)),
             last_fetch_url: Arc::new(RwLock::new(None)),
+            fetch_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -192,14 +195,15 @@ async fn handle_request(request: Request, state: &EngineState) -> Response {
             None => Response::err("no profile loaded"),
         },
         RequestCommand::Fetch => {
+            let _fetch_guard = state.fetch_lock.lock().await;
             let url = request.url.expect("validated by parse_request_line");
             match fetch_and_normalize(&url).await {
                 Ok(profile) => {
                     *state.last_fetch_url.write().await = Some(url);
                     *state.last_error.write().await = None;
-                    let summary = profile.fetch_summary();
+                    let response_data = profile.fetch_ipc_response_data();
                     *state.profile.write().await = Some(profile);
-                    Response::ok(summary)
+                    Response::ok(response_data)
                 }
                 Err(err) => {
                     let message = err.to_string();

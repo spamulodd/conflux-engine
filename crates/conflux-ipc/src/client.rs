@@ -32,7 +32,10 @@ impl IpcClient {
     pub async fn fetch(&self, url: &str) -> Result<ConfluxSubscription, ProtocolError> {
         let response = self.send(&Request::fetch(url)).await?;
         match response.status {
-            ResponseStatus::Ok => self.get_profile().await,
+            ResponseStatus::Ok => match profile_from_fetch_response(&response) {
+                Some(profile) => profile,
+                None => self.get_profile().await,
+            },
             ResponseStatus::Err => Err(ProtocolError::Transport(
                 response.msg.unwrap_or_else(|| "unknown IPC error".into()),
             )),
@@ -81,6 +84,17 @@ impl IpcClient {
     }
 }
 
+fn profile_from_fetch_response(
+    response: &Response,
+) -> Option<Result<ConfluxSubscription, ProtocolError>> {
+    let data = response.data.as_ref()?;
+    let profile_value = data.get("profile")?;
+    Some(
+        serde_json::from_value(profile_value.clone())
+            .map_err(|err| ProtocolError::InvalidRequest(err.to_string())),
+    )
+}
+
 fn response_into_profile(response: Response) -> Result<ConfluxSubscription, ProtocolError> {
     match response.status {
         ResponseStatus::Ok => {
@@ -104,5 +118,28 @@ mod tests {
     fn default_client_uses_platform_endpoint() {
         let client = IpcClient::default_client();
         assert!(!client.endpoint().is_empty());
+    }
+
+    #[test]
+    fn profile_from_fetch_response_reads_embedded_profile() {
+        let response = Response::ok(serde_json::json!({
+            "title": "Example",
+            "node_count": 0,
+            "profile": {
+                "title": "Example",
+                "source_url": null,
+                "update_interval_hours": 12,
+                "user_info": null,
+                "support_url": null,
+                "announce": null,
+                "nodes": [],
+                "extras": {}
+            }
+        }));
+
+        let profile = profile_from_fetch_response(&response)
+            .expect("embedded profile")
+            .expect("deserialize");
+        assert_eq!(profile.title, "Example");
     }
 }

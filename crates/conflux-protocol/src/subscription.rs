@@ -62,6 +62,19 @@ impl ConfluxSubscription {
         })
     }
 
+    /// FETCH response payload: summary plus the redacted profile from this fetch.
+    pub fn fetch_ipc_response_data(&self) -> serde_json::Value {
+        let redacted = self.redacted_for_ipc();
+        let mut data = self.fetch_summary();
+        if let serde_json::Value::Object(ref mut map) = data {
+            map.insert(
+                "profile".to_string(),
+                serde_json::to_value(&redacted).expect("redacted profile serializes"),
+            );
+        }
+        data
+    }
+
     /// Profile safe for IPC transport: credentials and raw URIs are redacted.
     pub fn redacted_for_ipc(&self) -> Self {
         Self {
@@ -78,5 +91,29 @@ impl ConfluxSubscription {
                 .collect(),
             extras: self.extras.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fetch_ipc_response_data_includes_profile() {
+        let profile = ConfluxSubscription {
+            title: "Test".into(),
+            source_url: Some("https://example.com/sub".into()),
+            update_interval_hours: 12,
+            user_info: None,
+            support_url: None,
+            announce: None,
+            nodes: vec![],
+            extras: SubscriptionExtras::default(),
+        };
+
+        let data = profile.fetch_ipc_response_data();
+        assert_eq!(data["node_count"], 0);
+        assert_eq!(data["profile"]["title"], "Test");
+        assert!(data["profile"]["nodes"].as_array().unwrap().is_empty());
     }
 }
