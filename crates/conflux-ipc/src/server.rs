@@ -120,6 +120,10 @@ impl IpcServer {
     async fn run_unix(&self) -> Result<(), ProtocolError> {
         use tokio::net::UnixListener;
 
+        // Hold an exclusive lock for the daemon lifetime so a second instance
+        // cannot remove the socket path and bind a rogue listener in its place.
+        let _daemon_lock = DaemonLock::acquire(&self.endpoint)?;
+
         let _ = std::fs::remove_file(&self.endpoint);
         let listener = UnixListener::bind(&self.endpoint)
             .map_err(|err| ProtocolError::Transport(err.to_string()))?;
@@ -136,6 +140,47 @@ impl IpcServer {
                 }
             });
         }
+    }
+}
+
+/// Exclusive process lock preventing multiple daemons on the same IPC endpoint.
+#[cfg(unix)]
+#[derive(Debug)]
+struct DaemonLock {
+    _file: std::fs::File,
+}
+
+#[cfg(unix)]
+impl DaemonLock {
+    fn acquire(endpoint: &str) -> Result<Self, ProtocolError> {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        use std::os::unix::io::AsRawFd;
+
+        let lock_path = format!("{endpoint}.lock");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|err| {
+                ProtocolError::Transport(format!("failed to open daemon lock file: {err}"))
+            })?;
+
+        let fd = file.as_raw_fd();
+        let ret = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+        if ret != 0 {
+            return Err(ProtocolError::Transport(
+                "another conflux daemon is already running on this endpoint".into(),
+            ));
+        }
+
+        file.set_len(0)
+            .map_err(|err| ProtocolError::Transport(err.to_string()))?;
+        writeln!(file, "{}", std::process::id())
+            .map_err(|err| ProtocolError::Transport(err.to_string()))?;
+
+        Ok(Self { _file: file })
     }
 }
 
@@ -260,5 +305,23 @@ mod tests {
         let state = Arc::new(EngineState::new());
         let response = handle_request(Request::ping(), &state).await;
         assert_eq!(response.status, ResponseStatus::Ok);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_lock_rejects_second_instance() {
+        let lock_path = std::env::temp_dir().join(format!(
+            "conflux-daemon-lock-test-{}",
+            std::process::id()
+        ));
+        let endpoint = lock_path.to_string_lossy().into_owned();
+
+        let first = DaemonLock::acquire(&endpoint).expect("first lock");
+        let second = DaemonLock::acquire(&endpoint).expect_err("second lock must fail");
+        assert!(matches!(second, ProtocolError::Transport(_)));
+
+        drop(first);
+        let _third = DaemonLock::acquire(&endpoint).expect("lock after release");
+        let _ = std::fs::remove_file(format!("{endpoint}.lock"));
     }
 }
