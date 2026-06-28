@@ -261,7 +261,7 @@ impl Backend for SingboxBackend {
                     to: BackendState::Idle.as_str().to_string(),
                 });
             }
-            BackendState::Starting | BackendState::Running | BackendState::Error => {}
+            BackendState::Starting | BackendState::Running => {}
         }
 
         self.transition(BackendState::Stopping)?;

@@ -44,7 +44,6 @@ pub fn generate_config(
     let proxy_outbound = node_to_outbound(node, &outbound_tag)?;
     let mut outbounds = vec![proxy_outbound];
     outbounds.push(json!({ "type": "direct", "tag": "direct" }));
-    outbounds.push(json!({ "type": "dns", "tag": "dns-out" }));
 
     let mut inbounds = Vec::new();
     let mixed_inbound_tag = "mixed-in";
@@ -54,27 +53,34 @@ pub fn generate_config(
         inbounds.push(mixed_inbound(mixed_inbound_tag));
     }
 
-    let route_rules = if options.include_tun_inbound {
-        vec![
+    if options.include_tun_inbound {
+        outbounds.push(json!({ "type": "dns", "tag": "dns-out" }));
+        let route_rules = vec![
             json!({ "protocol": "dns", "outbound": "dns-out" }),
             json!({ "inbound": options.tun_tag, "outbound": outbound_tag }),
-        ]
-    } else {
-        vec![
-            json!({ "protocol": "dns", "outbound": "dns-out" }),
-            json!({ "inbound": mixed_inbound_tag, "outbound": outbound_tag }),
-        ]
-    };
+        ];
+        return Ok(json!({
+            "log": { "level": "info" },
+            "dns": {
+                "servers": [{
+                    "type": "udp",
+                    "tag": "dns-direct",
+                    "server": "1.1.1.1"
+                }]
+            },
+            "inbounds": inbounds,
+            "outbounds": outbounds,
+            "route": {
+                "rules": route_rules,
+                "final": outbound_tag
+            }
+        }));
+    }
+
+    let route_rules = vec![json!({ "inbound": mixed_inbound_tag, "outbound": outbound_tag })];
 
     Ok(json!({
         "log": { "level": "info" },
-        "dns": {
-            "servers": [{
-                "type": "udp",
-                "tag": "dns-direct",
-                "server": "1.1.1.1"
-            }]
-        },
         "inbounds": inbounds,
         "outbounds": outbounds,
         "route": {
@@ -397,20 +403,11 @@ fn tls_block(tls: &Option<TlsConfig>, reality: &Option<RealityConfig>) -> Option
 }
 
 fn reality_block(reality: &RealityConfig) -> Value {
-    let mut block = json!({
+    json!({
         "enabled": true,
         "public_key": reality.public_key,
         "short_id": reality.short_id,
-    });
-
-    if let Some(spider_x) = &reality.spider_x {
-        block
-            .as_object_mut()
-            .expect("reality object")
-            .insert("spider_x".to_string(), json!(spider_x));
-    }
-
-    block
+    })
 }
 
 fn uuid_string(credentials: &Credentials) -> String {

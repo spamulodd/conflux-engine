@@ -3,15 +3,6 @@ source: crates/conflux-backend/src/singbox/config.rs
 expression: redacted
 ---
 {
-  "dns": {
-    "servers": [
-      {
-        "server": "<REDACTED_SERVER>",
-        "tag": "dns-direct",
-        "type": "udp"
-      }
-    ]
-  },
   "inbounds": [
     {
       "listen": "127.0.0.1",
@@ -35,19 +26,11 @@ expression: redacted
     {
       "tag": "direct",
       "type": "direct"
-    },
-    {
-      "tag": "dns-out",
-      "type": "dns"
     }
   ],
   "route": {
     "final": "proxy",
     "rules": [
-      {
-        "outbound": "dns-out",
-        "protocol": "dns"
-      },
       {
         "inbound": "mixed-in",
         "outbound": "proxy"
