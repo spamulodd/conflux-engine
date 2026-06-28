@@ -78,9 +78,11 @@ mod tests {
             id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").expect("uuid"),
         };
         let tcp = Transport::default();
-        let mut grpc = Transport::default();
-        grpc.kind = TransportKind::Grpc;
-        grpc.service_name = Some("grpc".to_string());
+        let grpc = Transport {
+            kind: TransportKind::Grpc,
+            service_name: Some("grpc".to_string()),
+            ..Default::default()
+        };
 
         let first = stable_node_id(Protocol::Vless, "example.com", 443, &creds, &tcp);
         let second = stable_node_id(Protocol::Vless, "example.com", 443, &creds, &grpc);

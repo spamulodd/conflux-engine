@@ -53,18 +53,14 @@ fn resolve_singbox_next_to_daemon() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
 
-    for candidate in [
+    [
         dir.join("sing-box.exe"),
         dir.join("sing-box"),
         dir.join("engines").join("sing-box.exe"),
         dir.join("engines").join("sing-box"),
-    ] {
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-
-    None
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {

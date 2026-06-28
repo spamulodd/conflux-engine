@@ -137,8 +137,7 @@ fn parse_helper_output(stdout: &str) -> Result<String, ConfluxError> {
     stdout
         .lines()
         .map(str::trim)
-        .filter(|line| line.starts_with("http://") || line.starts_with("https://"))
-        .last()
+        .rfind(|line| line.starts_with("http://") || line.starts_with("https://"))
         .map(str::to_string)
         .ok_or_else(|| {
             ConfluxError::InvalidUrl(
