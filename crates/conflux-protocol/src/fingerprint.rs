@@ -25,7 +25,10 @@ pub fn stable_node_id(
         hasher.update([0]);
     }
     let digest = hasher.finalize();
-    format!("{:016x}", u64::from_be_bytes(digest[..8].try_into().expect("8 bytes")))
+    format!(
+        "{:016x}",
+        u64::from_be_bytes(digest[..8].try_into().expect("8 bytes"))
+    )
 }
 
 #[cfg(test)]

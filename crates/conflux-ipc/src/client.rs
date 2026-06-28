@@ -74,9 +74,9 @@ impl IpcClient {
     pub async fn disconnect(&self) -> Result<Value, ProtocolError> {
         let response = self.send(&Request::disconnect()).await?;
         match response.status {
-            ResponseStatus::Ok => response.data.ok_or_else(|| {
-                ProtocolError::Transport("disconnect response missing data".into())
-            }),
+            ResponseStatus::Ok => response
+                .data
+                .ok_or_else(|| ProtocolError::Transport("disconnect response missing data".into())),
             ResponseStatus::Err => Err(ProtocolError::Transport(
                 response.msg.unwrap_or_else(|| "unknown IPC error".into()),
             )),

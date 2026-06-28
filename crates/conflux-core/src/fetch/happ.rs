@@ -63,15 +63,12 @@ fn decrypt_with_helper(link: &str) -> Result<String, ConfluxError> {
         )
     })?;
 
-    let output = Command::new(&helper)
-        .arg(link)
-        .output()
-        .map_err(|err| {
-            ConfluxError::InvalidUrl(format!(
-                "failed to run happ decrypt helper '{}': {err}",
-                helper.display()
-            ))
-        })?;
+    let output = Command::new(&helper).arg(link).output().map_err(|err| {
+        ConfluxError::InvalidUrl(format!(
+            "failed to run happ decrypt helper '{}': {err}",
+            helper.display()
+        ))
+    })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Some(error) = parse_helper_error(&stdout) {
@@ -93,8 +90,9 @@ fn decrypt_with_helper(link: &str) -> Result<String, ConfluxError> {
         )));
     }
 
-    let stdout = String::from_utf8(output.stdout)
-        .map_err(|err| ConfluxError::InvalidUrl(format!("happ decrypt output is not utf-8: {err}")))?;
+    let stdout = String::from_utf8(output.stdout).map_err(|err| {
+        ConfluxError::InvalidUrl(format!("happ decrypt output is not utf-8: {err}"))
+    })?;
 
     parse_helper_output(&stdout).map_err(|err| {
         ConfluxError::InvalidUrl(format!(

@@ -314,21 +314,15 @@ mod tests {
     fn secret_files_are_not_world_readable() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = std::env::temp_dir().join(format!(
-            "conflux-backend-perm-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("conflux-backend-perm-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
 
         ensure_secret_dir(&dir).expect("create secret dir");
         let path = dir.join("singbox-test.json");
         write_secret_file(&path, br#"{"password":"secret"}"#).expect("write secret file");
 
-        let mode = fs::metadata(&path)
-            .expect("metadata")
-            .permissions()
-            .mode()
-            & 0o777;
+        let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "config must be owner-read/write only");
 
         let dir_mode = fs::metadata(&dir)

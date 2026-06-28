@@ -150,9 +150,7 @@ fn has_clash_yaml_markers(body: &str) -> bool {
 
     body.lines().any(|line| {
         let key = line.trim_start();
-        key.starts_with("proxies:")
-            || key.starts_with("proxy-groups:")
-            || key.starts_with("rules:")
+        key.starts_with("proxies:") || key.starts_with("proxy-groups:") || key.starts_with("rules:")
     })
 }
 

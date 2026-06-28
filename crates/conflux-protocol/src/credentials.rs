@@ -49,9 +49,7 @@ impl Credentials {
         use crate::redact::IPC_REDACTED;
 
         match self {
-            Self::Uuid { .. } => Self::Uuid {
-                id: Uuid::nil(),
-            },
+            Self::Uuid { .. } => Self::Uuid { id: Uuid::nil() },
             Self::Password { .. } => Self::Password {
                 password: IPC_REDACTED.to_string(),
             },

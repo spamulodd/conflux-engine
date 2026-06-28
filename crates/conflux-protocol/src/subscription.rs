@@ -179,7 +179,10 @@ mod tests {
             Some(crate::redact::IPC_REDACTED.to_string())
         );
         assert_eq!(node.credentials, Credentials::Uuid { id: Uuid::nil() });
-        assert_eq!(node.obfs.as_ref().unwrap().password.as_deref(), Some("[redacted]"));
+        assert_eq!(
+            node.obfs.as_ref().unwrap().password.as_deref(),
+            Some("[redacted]")
+        );
         assert_eq!(
             node.raw,
             RawPayload::ClashProxy {

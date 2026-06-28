@@ -73,9 +73,7 @@ fn parser_name(raw: &RawNode) -> String {
 fn is_skippable_node_error(err: &ConfluxError) -> bool {
     matches!(
         err,
-        ConfluxError::UnsupportedProtocol(_)
-            | ConfluxError::InvalidUri(_)
-            | ConfluxError::Parse(_)
+        ConfluxError::UnsupportedProtocol(_) | ConfluxError::InvalidUri(_) | ConfluxError::Parse(_)
     )
 }
 
@@ -98,6 +96,18 @@ fn pick_update_interval(headers: &SubscriptionHeaders, body: &BodyMetadata) -> u
 
 fn non_empty(value: Option<String>) -> Option<String> {
     value.filter(|text| !text.is_empty())
+}
+
+/// Dummy nodes returned by panels for unsupported clients.
+pub fn is_placeholder_node(node: &ConfluxNode) -> bool {
+    let tag = node.tag.to_lowercase();
+    if tag.contains("не поддерживается") || tag.contains("not supported") {
+        return true;
+    }
+
+    node.server == "0.0.0.0"
+        && node.port <= 1
+        && matches!(node.credentials, Credentials::Uuid { id } if id == Uuid::nil())
 }
 
 fn normalize_node(raw: RawNode, source: &mut NodeSource) -> Result<ConfluxNode, ConfluxError> {

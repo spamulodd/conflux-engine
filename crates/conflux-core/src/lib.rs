@@ -17,7 +17,16 @@ pub use parse::{parse_body, BodyMetadata, ParseResult, RawNode, SubscriptionForm
 pub async fn fetch_and_normalize(url: &str) -> Result<ConfluxSubscription, ConfluxError> {
     let fetched = fetch_subscription(url).await?;
     let parsed = parse_body(&fetched.body, Some(&fetched.headers))?;
-    normalize::normalize_fetch(fetched, parsed)
+    let mut profile = normalize::normalize_fetch(fetched, parsed)?;
+    profile
+        .nodes
+        .retain(|node| !normalize::is_placeholder_node(node));
+    if profile.nodes.is_empty() {
+        return Err(ConfluxError::Parse(
+            "subscription contains no usable servers (panel returned placeholder only)".into(),
+        ));
+    }
+    Ok(profile)
 }
 
 /// Parse a subscription body and normalize it with optional HTTP headers.

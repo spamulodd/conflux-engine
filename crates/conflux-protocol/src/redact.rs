@@ -19,14 +19,8 @@ pub(crate) fn redact_sensitive_json(value: &Value) -> Value {
 
 fn redact_json_field(key: &str, value: &Value) -> Value {
     match key {
-        "uuid"
-        | "password"
-        | "private_key"
-        | "public_key"
-        | "short_id"
-        | "key_hex"
-        | "obfs-password"
-        | "obfs_password" => Value::String(IPC_REDACTED.to_string()),
+        "uuid" | "password" | "private_key" | "public_key" | "short_id" | "key_hex"
+        | "obfs-password" | "obfs_password" => Value::String(IPC_REDACTED.to_string()),
         _ => redact_sensitive_json(value),
     }
 }
