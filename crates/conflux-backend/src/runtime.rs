@@ -228,6 +228,17 @@ impl Backend for SingboxBackend {
 
         self.config_path = Some(config_path);
         self.transition(BackendState::Running)?;
+
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        self.refresh_running_state();
+        if self.state == BackendState::Error {
+            let message = self
+                .last_error
+                .clone()
+                .unwrap_or_else(|| "sing-box exited immediately after start".to_string());
+            return Err(BackendError::Process(message));
+        }
+
         self.last_error = None;
         Ok(())
     }

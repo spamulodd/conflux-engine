@@ -121,13 +121,21 @@ impl SingboxProcess {
             return Err(BackendError::AlreadyRunning);
         }
 
+        let stderr_log =
+            std::env::temp_dir().join(format!("conflux-singbox-{}.log", std::process::id()));
+        let stderr_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&stderr_log)
+            .map_err(|err| BackendError::Spawn(err.to_string()))?;
+
         let child = Command::new(&options.binary)
             .arg("run")
             .arg("-c")
             .arg(&options.config_path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::from(stderr_file))
             .spawn()
             .map_err(|err| BackendError::Spawn(err.to_string()))?;
 

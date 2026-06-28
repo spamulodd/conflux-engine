@@ -13,12 +13,10 @@ expression: redacted
   },
   "inbounds": [
     {
-      "auto_route": true,
-      "inet4_address": "172.19.0.1/30",
-      "interface_name": "conflux-tun",
-      "strict_route": true,
-      "tag": "tun-in",
-      "type": "tun"
+      "listen": "127.0.0.1",
+      "listen_port": 7890,
+      "tag": "mixed-in",
+      "type": "mixed"
     }
   ],
   "log": {
@@ -61,7 +59,7 @@ expression: redacted
         "protocol": "dns"
       },
       {
-        "inbound": "tun-in",
+        "inbound": "mixed-in",
         "outbound": "proxy"
       }
     ]
